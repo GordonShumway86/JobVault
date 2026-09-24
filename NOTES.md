@@ -3,6 +3,67 @@
 Running log of what's been built, what's mocked, and what's next — so a
 future session (or you) can pick this back up without re-deriving context.
 
+## Don't repeat these (read this section, full stop)
+
+Concrete mistakes already made and fixed once this project. Each one cost
+real time or created a real bug — check this list before doing any of the
+following again, rather than skimming past it.
+
+- **Never write a real secret (password, PIN, API key) into any file that
+  gets committed to this repo.** It's public on GitHub. Secrets belong in
+  `.env.local` (gitignored) or in the hosting platform's environment
+  variable settings — nowhere else. This was caught twice: once when a
+  real PIN got typed into this file (see 2026-09-24 "Added a PIN screen"),
+  and once when a real password almost got hardcoded into
+  `AuthContext.tsx` to work around a flaky deployment form (see
+  2026-09-24 "Deployed to Vercel" step 4) — a safety check in the harness
+  blocked that one before it was committed.
+- **When Vercel environment variables need to change, use the Vercel MCP
+  connector's `edit_project_env` directly.** Don't ask Ed to hand-edit
+  them through Vercel's mobile website if it can be avoided — that UI has
+  real problems (values marked "Secret" are write-only and can't be
+  re-checked, the list re-sorts after every edit so the wrong row can get
+  tapped, and it's easy to accidentally paste a multi-line block into a
+  single field). Full story: 2026-09-24 "Deployed to Vercel."
+- **After changing Vercel env vars, always trigger a genuinely fresh build**
+  — `create_deployment` with `gitSource` + `forceNew: 1`. Never rely on
+  "redeploy an existing deployment" (`deploymentId` alone) when env vars
+  changed — it can silently serve a stale build that doesn't reflect the
+  new values. This exact gap once let the PIN screen get bypassed
+  entirely. Full story: 2026-09-24 "Deployed to Vercel," step 7.
+- **This app deliberately has no traditional login.** Auto-login (one
+  fixed Supabase account, invisible to Ed) plus a client-side PIN gate is
+  the intended design, already discussed and agreed with Ed after he
+  specifically said he never wants to risk getting locked out by a broken
+  login. Don't propose adding a real sign-in form back.
+- **Never write the actual PIN in plaintext anywhere in this repo**,
+  NOTES.md included — only its SHA-256 hash belongs in version-controlled
+  files (and only in `.env.local`, which is gitignored, not committed).
+  Ask Ed directly if you need the current PIN.
+- **This sandbox cannot reach Supabase, Vercel, or the Tesseract.js CDN
+  directly** — outbound requests to those hosts get denied by network
+  policy. That's expected, not a bug to chase. Use the Supabase and
+  Vercel MCP connectors (not curl/fetch/a local browser) for any backend
+  or deploy work, and know that OCR accuracy can only be verified for
+  real on Ed's own phone with real internet.
+- **Ed has no coding background.** Explain technical steps in plain
+  language, and prefer doing things directly (via a connector, via code)
+  over asking him to perform multi-step technical actions in a web UI.
+
+## Quick facts
+
+- Repo: `github.com/GordonShumway86/JobVault`, branch
+  `claude/service-log-hvac-app-ssx82g` (this is also the repo's default
+  branch — there is no separate `main` to diff against).
+- Live app: `job-vault-six-mu.vercel.app` (PIN required — ask Ed).
+- Supabase project: `bxagejspufjuffadxkkl` (ref `ed95667@gmail.com's
+  Project` in the dashboard).
+- Vercel project: `job-vault`, id `prj_EmUm0QrpEMp1rq2uh3wxWrmlqbIh`.
+- Both the Supabase and Vercel MCP connectors were connected in Ed's
+  claude.ai account as of 2026-09-25 — a new session may already have
+  them available, or may need Ed to reconnect them (Settings →
+  Connectors) if they don't show up.
+
 ---
 
 ## 2026-09-24 — Phase 1 built
