@@ -142,8 +142,9 @@ type and compares it to a stored hash client-side. Wrong PIN just says "try
 again," instantly, no rate limit — can't get locked out. Right PIN sets a
 flag in the browser's local storage and it won't ask again on that device.
 
-- Ed's PIN: **349871** (only the SHA-256 hash of it is in `.env.local` /
-  the built app, never the PIN itself).
+- The PIN itself is NOT recorded here (this repo is public) — only its
+  SHA-256 hash lives in `.env.local` / the built app. See `.env.local` for
+  the current hash; ask Ed if you need to know the actual PIN.
 - Verified end-to-end in-browser: wrong PIN rejects and lets you retry
   immediately, correct PIN unlocks, and it stays unlocked after a reload
   (checked via automated browser test, screenshots taken).

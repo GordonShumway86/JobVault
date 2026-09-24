@@ -23,6 +23,17 @@ function isUnlocked(): boolean {
   }
 }
 
+// Re-locks this device — clears the "unlocked" flag and reloads, so the
+// PIN screen shows again. Used by the "Lock App" button in More.
+export function lockApp() {
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // ignore
+  }
+  window.location.reload();
+}
+
 export default function PinGate({ children }: { children: ReactNode }) {
   const [unlocked, setUnlocked] = useState(isUnlocked());
   const [pin, setPin] = useState('');

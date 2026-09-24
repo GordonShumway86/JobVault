@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { pendingMutationCount, isOnline, onSyncStateChange } from '../lib/sync';
+import { lockApp } from '../auth/PinGate';
 import TopBar from '../components/TopBar';
 
 export default function More() {
@@ -40,6 +41,13 @@ export default function More() {
             Customers <span className="text-zinc-600">›</span>
           </Link>
         </div>
+
+        <button
+          onClick={lockApp}
+          className="w-full rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-300 text-sm font-semibold py-3.5"
+        >
+          Lock App
+        </button>
       </div>
     </div>
   );
