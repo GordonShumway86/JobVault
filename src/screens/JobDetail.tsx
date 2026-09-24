@@ -9,6 +9,7 @@ import SectionCard from '../components/SectionCard';
 import StatusBadge from '../components/StatusBadge';
 import PhotoUploader from '../components/PhotoUploader';
 import PhotoThumb from '../components/PhotoThumb';
+import NameplateScanner from '../components/NameplateScanner';
 import { Field, Select, TextArea, TextInput } from '../components/Field';
 import {
   CALL_TYPE_LABELS, JOB_STATUS_LABELS, FOLLOWUP_REASON_LABELS,
@@ -146,6 +147,14 @@ export default function JobDetail() {
             <div className="grid grid-cols-3 gap-2 mt-2">
               {attachments.map((a) => <PhotoThumb key={a.id} attachment={a} />)}
             </div>
+          )}
+        </SectionCard>
+
+        <SectionCard title="Scan Nameplate" subtitle="Reads model/serial/specs from a photo — review before saving">
+          {equipment ? (
+            <NameplateScanner jobId={job.id} equipment={equipment} />
+          ) : (
+            <div className="text-zinc-500 text-sm">Link this call to a piece of equipment first (tap Edit) to scan its nameplate.</div>
           )}
         </SectionCard>
 

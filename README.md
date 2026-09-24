@@ -195,28 +195,36 @@ and sync automatically next time you have signal.
 
 - **Parts, Quotes, Diagnostic Readings**: the database tables and TypeScript
   types are fully built (so nothing needs to change later), but there's no
-  screen UI for them yet — that's the first item in Phase 2.
+  screen UI for them yet — next up in Phase 2.
 - **Job numbers** are generated on-device (`SL-YYMMDD-XXX`) so job creation
   works fully offline; they're not a strictly sequential counter.
 - Settings screen covers pricing defaults and quote language; custom call
   types/equipment types/photo categories are stored but have no editor UI yet.
 
-## Phase 2 — next up
+## Phase 2 progress
 
-1. **Nameplate photo → OCR review** — reuse the exact approach from your
-   `Model-Photo-to-Manual-Lookup` repo (Tesseract.js running client-side,
-   crop-to-reticle + contrast preprocessing, regex extraction), extended to
-   propose manufacturer/model/serial/voltage/phase/MCA/MOCP, with an editable
-   review screen before anything is saved.
+1. ✅ **Nameplate photo → OCR review** (`src/components/NameplateScanner.tsx`,
+   `src/lib/nameplateOcr.ts`) — take/upload a nameplate photo from a Job
+   Detail page (only enabled once the job is linked to a piece of equipment),
+   runs Tesseract.js entirely on-device (same free, no-API-key approach as
+   your `Model-Photo-to-Manual-Lookup` repo, loaded on demand so it never
+   bloats the main app), regex-extracts manufacturer/model/serial/
+   refrigerant/voltage/phase/MCA/MOCP, and shows an editable review screen
+   (pre-filled with existing equipment values as a fallback for anything not
+   detected) with an explicit "AI extraction may be inaccurate" warning
+   before anything saves. Accepting writes the photo as a categorized job
+   attachment (with the raw OCR text and structured guess preserved for
+   audit) and updates the equipment record.
 2. **Vendor quote/receipt OCR review** — same free Tesseract.js pipeline,
-   tuned to pull vendor name, date, totals, and line items.
+   tuned to pull vendor name, date, totals, and line items. Not started.
 3. **Voice-to-text notes** — Web Speech API (free, built into the browser) for
-   dictating complaints/notes/diagnoses in the field.
+   dictating complaints/notes/diagnoses in the field. Not started.
 4. **Parts tracking UI** (table already exists) and **Quote Builder** (line
    items, internal cost vs. customer-facing view, already-modeled totals).
+   Not started.
 5. **AI-generated editable service summary** — this is the one feature that
-   benefits from a real LLM (turning rough notes into a clean report). See
-   below.
+   benefits from a real LLM (turning rough notes into a clean report). Not
+   started. See below.
 
 ## What had to be left out (would require a paid service)
 

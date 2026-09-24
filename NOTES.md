@@ -286,3 +286,67 @@ extraction happens. Nameplate OCR autofill is the first Phase 2 item
   Claude session as of today; a fresh session will need Ed to reconnect
   them (or already have them from claude.ai account-level settings —
   unconfirmed whether connector auth persists across sessions).
+
+---
+
+## 2026-09-25 — Phase 2 kickoff: 3 field changes + nameplate OCR scanner
+
+Ed's request bundled three quick DB/UI changes with starting Phase 2.
+
+### Three fixes (all live in the database + app)
+1. **Renamed `jobs.customer_complaint` → `jobs.reason_for_call`** — real
+   column rename via `supabase/migrations/0004_reason_and_wo.sql`, applied
+   live. Updated every reference across the app (types, JobForm, JobDetail,
+   JobsList, Dashboard, CustomerDetail, seed.sql).
+2. **Added `jobs.work_order_number`** (text, optional) — for the PO/work
+   order reference a customer or property manager issues per call. Shown in
+   JobForm (Call Details section) and JobDetail header, included in search.
+3. **Sites now show address/city/state everywhere they're picked or
+   listed** (JobForm's site dropdown, JobDetail header, JobsList, Dashboard
+   search, CustomerDetail's site list) — Ed's example was Dollar General:
+   many sites per customer, previously indistinguishable by name alone in
+   the site picker.
+
+Verified all three end-to-end with a real browser test (local-only mode,
+since this sandbox can't reach the live Supabase project): created "Dollar
+General" / "Store #12345 — 900 Main St, Springfield, IL" with a work order
+number and reason for call, confirmed everything displays correctly on Job
+Detail.
+
+### Nameplate OCR scanner (Phase 2, item 1 — done)
+
+New files: `src/lib/nameplateOcr.ts` (regex extraction: manufacturer via a
+known-brand keyword list, model/serial via labeled-prefix regex, refrigerant
+via known refrigerant codes, voltage/phase/MCA/MOCP via labeled-number
+regex) and `src/components/NameplateScanner.tsx` (camera/library photo
+capture → grayscale+contrast preprocessing on a canvas → Tesseract.js OCR,
+loaded via dynamic `import()` so it doesn't bloat the main bundle → editable
+review screen, pre-filled with OCR guesses falling back to the equipment's
+existing values for anything not detected → explicit "AI extraction may be
+inaccurate" warning → Accept and Save writes the photo as a job_attachment
+(category `equipment_nameplate`, with the raw OCR text and structured guess
+preserved in `ai_extracted_text`/`ai_extracted_data` for an audit trail) and
+updates the equipment record with the (user-reviewed) values).
+
+Wired into Job Detail as a new "Scan Nameplate" section — only enabled once
+the job is linked to a piece of equipment (nameplate photos need somewhere
+to write the extracted specs); shows a hint to link equipment first
+otherwise.
+
+**Testing note**: this sandbox has no network access to the CDN Tesseract.js
+fetches its OCR worker script from, so true OCR accuracy could not be
+verified here — but that failure path was exercised for real (a photo was
+uploaded, the fetch failed exactly as it would on a phone with no signal),
+and it degraded exactly as designed: friendly error message, falls back to
+manual entry pre-filled with the equipment's existing values, nothing
+crashes. **First thing to verify once this is live**: scan a real nameplate
+photo on an actual phone with real internet and confirm the OCR read is
+reasonably accurate; the regex extraction patterns may need tuning against
+real-world nameplate photo text once there's real OCR output to look at.
+
+### To pick this back up next
+- Phase 2 remaining: vendor quote/receipt OCR review, voice-to-text notes,
+  Parts tracking UI + Quote Builder, AI-generated service summary (the one
+  feature that'd want a paid LLM API).
+- Nameplate scanner needs a real on-device test with actual internet to
+  validate OCR accuracy and tune the regex patterns if needed.
