@@ -26,6 +26,12 @@ export interface PendingBlob {
   fileName: string;
 }
 
+export interface FormDraft {
+  id: string; // e.g. "customer:new" or "customer:<id>"
+  data: Record<string, unknown>;
+  updated_at: number;
+}
+
 class ServiceLogDB extends Dexie {
   customers!: Table<Customer, string>;
   sites!: Table<Site, string>;
@@ -42,6 +48,7 @@ class ServiceLogDB extends Dexie {
   user_settings!: Table<UserSettings, string>;
   mutation_queue!: Table<QueuedMutation, number>;
   pending_blobs!: Table<PendingBlob, string>;
+  form_drafts!: Table<FormDraft, string>;
 
   constructor() {
     super('service-log');
@@ -61,6 +68,12 @@ class ServiceLogDB extends Dexie {
       user_settings: 'owner_id',
       mutation_queue: '++id, table, recordId, createdAt',
       pending_blobs: 'id',
+    });
+    // v2: per-field draft autosave, so an in-progress form (customer, site,
+    // equipment, job) survives the app being backgrounded/switched away from
+    // mid-entry — see formDraft.ts.
+    this.version(2).stores({
+      form_drafts: 'id, updated_at',
     });
   }
 }

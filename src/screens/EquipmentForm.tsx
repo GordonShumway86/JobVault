@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useNavigate, useParams } from 'react-router-dom';
 import { db } from '../lib/db';
 import { saveRecord, makeId } from '../lib/repo';
 import { getOwnerId } from '../auth/AuthContext';
+import { saveDraft, loadDraft, clearDraft } from '../lib/formDraft';
 import TopBar from '../components/TopBar';
 import SectionCard from '../components/SectionCard';
 import { Field, TextInput, TextArea, Select } from '../components/Field';
@@ -15,6 +16,8 @@ export default function EquipmentForm() {
   const editing = useLiveQuery(() => (id ? db.equipment.get(id) : undefined), [id]);
   const siteIdFinal = siteId ?? editing?.site_id;
   const site = useLiveQuery(() => (siteIdFinal ? db.sites.get(siteIdFinal) : undefined), [siteIdFinal]);
+  const draftId = `equipment:${id ?? 'new'}`;
+  const draftAppliedRef = useRef(false);
 
   const [category, setCategory] = useState<EquipmentCategory>('split_system');
   const [nickname, setNickname] = useState('');
@@ -33,13 +36,49 @@ export default function EquipmentForm() {
   const [notes, setNotes] = useState('');
 
   useEffect(() => {
-    if (!editing) return;
+    if (!editing || draftAppliedRef.current) return;
     setCategory(editing.category); setNickname(editing.nickname ?? ''); setLocation(editing.location_at_site ?? '');
     setManufacturer(editing.manufacturer ?? ''); setModel(editing.model_number ?? ''); setSerial(editing.serial_number ?? '');
     setRefrigerant(editing.refrigerant_type ?? ''); setCapacity(editing.nominal_capacity ?? ''); setVoltage(editing.voltage ?? '');
     setPhase(editing.phase ?? ''); setMca(editing.mca ?? ''); setMocp(editing.mocp ?? '');
     setInstalledDate(editing.installed_date ?? ''); setStatus(editing.status); setNotes(editing.equipment_notes ?? '');
   }, [editing]);
+
+  // Restore any in-progress work left behind if this form was closed
+  // (app switched away, browser killed, etc.) before it was saved.
+  useEffect(() => {
+    let cancelled = false;
+    loadDraft(draftId).then((d) => {
+      if (cancelled || !d) return;
+      if (typeof d.category === 'string') setCategory(d.category as EquipmentCategory);
+      if (typeof d.nickname === 'string') setNickname(d.nickname);
+      if (typeof d.location === 'string') setLocation(d.location);
+      if (typeof d.manufacturer === 'string') setManufacturer(d.manufacturer);
+      if (typeof d.model === 'string') setModel(d.model);
+      if (typeof d.serial === 'string') setSerial(d.serial);
+      if (typeof d.refrigerant === 'string') setRefrigerant(d.refrigerant);
+      if (typeof d.capacity === 'string') setCapacity(d.capacity);
+      if (typeof d.voltage === 'string') setVoltage(d.voltage);
+      if (typeof d.phase === 'string') setPhase(d.phase);
+      if (typeof d.mca === 'string') setMca(d.mca);
+      if (typeof d.mocp === 'string') setMocp(d.mocp);
+      if (typeof d.installedDate === 'string') setInstalledDate(d.installedDate);
+      if (typeof d.status === 'string') setStatus(d.status as EquipmentStatus);
+      if (typeof d.notes === 'string') setNotes(d.notes);
+      draftAppliedRef.current = true;
+    });
+    return () => { cancelled = true; };
+  }, [draftId]);
+
+  // Fires on leaving any field in the form below (blur bubbles), so each
+  // field you tab/click away from is saved immediately — only the field
+  // still being typed when the app gets interrupted can be lost.
+  function persistDraft() {
+    saveDraft(draftId, {
+      category, nickname, location, manufacturer, model, serial, refrigerant,
+      capacity, voltage, phase, mca, mocp, installedDate, status, notes,
+    });
+  }
 
   async function submit() {
     if (!siteIdFinal) return;
@@ -56,13 +95,14 @@ export default function EquipmentForm() {
       status, created_at: editing?.created_at ?? now, updated_at: now,
     };
     await saveRecord('equipment', rec);
+    await clearDraft(draftId);
     navigate(`/equipment/${rec.id}`);
   }
 
   return (
     <div>
       <TopBar title={editing ? 'Edit Equipment' : 'New Equipment'} back />
-      <div className="p-4 space-y-3">
+      <div className="p-4 space-y-3" onBlur={persistDraft}>
         {site && <div className="text-zinc-500 text-sm -mt-1">At {site.name}</div>}
         <SectionCard title="Identity">
           <Field label="Category">

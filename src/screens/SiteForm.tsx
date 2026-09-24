@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useNavigate, useParams } from 'react-router-dom';
 import { db } from '../lib/db';
 import { saveRecord, makeId } from '../lib/repo';
 import { getOwnerId } from '../auth/AuthContext';
+import { saveDraft, loadDraft, clearDraft } from '../lib/formDraft';
 import TopBar from '../components/TopBar';
 import { Field, TextInput, TextArea } from '../components/Field';
 
@@ -13,6 +14,8 @@ export default function SiteForm() {
   const editing = useLiveQuery(() => (id ? db.sites.get(id) : undefined), [id]);
   const custId = customerId ?? editing?.customer_id;
   const customer = useLiveQuery(() => (custId ? db.customers.get(custId) : undefined), [custId]);
+  const draftId = `site:${id ?? 'new'}`;
+  const draftAppliedRef = useRef(false);
 
   const [name, setName] = useState('');
   const [address, setAddress] = useState('');
@@ -25,12 +28,39 @@ export default function SiteForm() {
   const [internalNotes, setInternalNotes] = useState('');
 
   useEffect(() => {
-    if (!editing) return;
+    if (!editing || draftAppliedRef.current) return;
     setName(editing.name); setAddress(editing.address ?? ''); setCity(editing.city ?? '');
     setState(editing.state ?? ''); setZip(editing.zip ?? ''); setContact(editing.primary_contact_name ?? '');
     setContactPhone(editing.contact_phone ?? ''); setAccess(editing.access_instructions ?? '');
     setInternalNotes(editing.internal_notes ?? '');
   }, [editing]);
+
+  // Restore any in-progress work left behind if this form was closed
+  // (app switched away, browser killed, etc.) before it was saved.
+  useEffect(() => {
+    let cancelled = false;
+    loadDraft(draftId).then((d) => {
+      if (cancelled || !d) return;
+      if (typeof d.name === 'string') setName(d.name);
+      if (typeof d.address === 'string') setAddress(d.address);
+      if (typeof d.city === 'string') setCity(d.city);
+      if (typeof d.state === 'string') setState(d.state);
+      if (typeof d.zip === 'string') setZip(d.zip);
+      if (typeof d.contact === 'string') setContact(d.contact);
+      if (typeof d.contactPhone === 'string') setContactPhone(d.contactPhone);
+      if (typeof d.access === 'string') setAccess(d.access);
+      if (typeof d.internalNotes === 'string') setInternalNotes(d.internalNotes);
+      draftAppliedRef.current = true;
+    });
+    return () => { cancelled = true; };
+  }, [draftId]);
+
+  // Fires on leaving any field in the form below (blur bubbles), so each
+  // field you tab/click away from is saved immediately — only the field
+  // still being typed when the app gets interrupted can be lost.
+  function persistDraft() {
+    saveDraft(draftId, { name, address, city, state, zip, contact, contactPhone, access, internalNotes });
+  }
 
   async function submit() {
     if (!name.trim() || !custId) return;
@@ -45,13 +75,14 @@ export default function SiteForm() {
       archived: editing?.archived ?? false, created_at: editing?.created_at ?? now, updated_at: now,
     };
     await saveRecord('sites', rec);
+    await clearDraft(draftId);
     navigate(`/sites/${rec.id}`);
   }
 
   return (
     <div>
       <TopBar title={editing ? 'Edit Site' : 'New Site'} back />
-      <div className="p-4 space-y-3">
+      <div className="p-4 space-y-3" onBlur={persistDraft}>
         {customer && <div className="text-zinc-500 text-sm -mt-1">For {customer.name}</div>}
         <Field label="Site name"><TextInput value={name} onChange={(e) => setName(e.target.value)} placeholder="Main location" /></Field>
         <Field label="Address"><TextInput value={address} onChange={(e) => setAddress(e.target.value)} /></Field>

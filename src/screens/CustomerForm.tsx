@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useNavigate, useParams } from 'react-router-dom';
 import { db } from '../lib/db';
 import { saveRecord, makeId } from '../lib/repo';
 import { getOwnerId } from '../auth/AuthContext';
+import { saveDraft, loadDraft, clearDraft } from '../lib/formDraft';
 import TopBar from '../components/TopBar';
 import { Field, TextInput, TextArea, Select } from '../components/Field';
 import { CUSTOMER_TYPE_LABELS, type CustomerType } from '../types';
@@ -12,6 +13,8 @@ export default function CustomerForm() {
   const { id } = useParams();
   const navigate = useNavigate();
   const editing = useLiveQuery(() => (id ? db.customers.get(id) : undefined), [id]);
+  const draftId = `customer:${id ?? 'new'}`;
+  const draftAppliedRef = useRef(false);
 
   const [name, setName] = useState('');
   const [type, setType] = useState<CustomerType>('residential');
@@ -22,11 +25,36 @@ export default function CustomerForm() {
   const [notes, setNotes] = useState('');
 
   useEffect(() => {
-    if (!editing) return;
+    if (!editing || draftAppliedRef.current) return;
     setName(editing.name); setType(editing.customer_type); setContact(editing.primary_contact_name ?? '');
     setPhone(editing.phone ?? ''); setEmail(editing.email ?? ''); setBillingAddress(editing.billing_address ?? '');
     setNotes(editing.notes ?? '');
   }, [editing]);
+
+  // Restore any in-progress work left behind if this form was closed
+  // (app switched away, browser killed, etc.) before it was saved.
+  useEffect(() => {
+    let cancelled = false;
+    loadDraft(draftId).then((d) => {
+      if (cancelled || !d) return;
+      if (typeof d.name === 'string') setName(d.name);
+      if (typeof d.type === 'string') setType(d.type as CustomerType);
+      if (typeof d.contact === 'string') setContact(d.contact);
+      if (typeof d.phone === 'string') setPhone(d.phone);
+      if (typeof d.email === 'string') setEmail(d.email);
+      if (typeof d.billingAddress === 'string') setBillingAddress(d.billingAddress);
+      if (typeof d.notes === 'string') setNotes(d.notes);
+      draftAppliedRef.current = true;
+    });
+    return () => { cancelled = true; };
+  }, [draftId]);
+
+  // Fires on leaving any field in the form below (blur bubbles), so each
+  // field you tab/click away from is saved immediately — only the field
+  // still being typed when the app gets interrupted can be lost.
+  function persistDraft() {
+    saveDraft(draftId, { name, type, contact, phone, email, billingAddress, notes });
+  }
 
   async function submit() {
     if (!name.trim()) return;
@@ -40,13 +68,14 @@ export default function CustomerForm() {
       created_at: editing?.created_at ?? now, updated_at: now,
     };
     await saveRecord('customers', rec);
+    await clearDraft(draftId);
     navigate(`/customers/${rec.id}`);
   }
 
   return (
     <div>
       <TopBar title={editing ? 'Edit Customer' : 'New Customer'} back />
-      <div className="p-4 space-y-3">
+      <div className="p-4 space-y-3" onBlur={persistDraft}>
         <Field label="Business / customer name"><TextInput value={name} onChange={(e) => setName(e.target.value)} /></Field>
         <Field label="Type">
           <Select value={type} onChange={(e) => setType(e.target.value as CustomerType)}>

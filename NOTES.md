@@ -514,3 +514,50 @@ Ed clarified two Phase 2 items that were never actually wanted:
 ### To pick this back up next
 - Ed is testing the nameplate scanner on his phone next — waiting on that
   before starting anything else in Phase 2.
+
+---
+
+## 2026-09-25 (still later) — Per-field autosave, so switching apps mid-form doesn't lose everything
+
+Ed hit real data loss: filled in a new customer's name, address, and more,
+switched apps mid-way, came back, and the whole thing was gone. Root cause:
+every form (New Customer, New Site, New Equipment, New Call) only wrote to
+the database on the final "Save" button tap — all the typing before that
+lived only in React state in memory, so backgrounding/losing the page threw
+it all away, not just the one unfinished field.
+
+Fix: added lightweight per-field draft autosave, not a big rewrite —
+- New `form_drafts` table in the local IndexedDB (Dexie schema bumped to
+  v2, `src/lib/db.ts`) and a small helper (`src/lib/formDraft.ts`:
+  `saveDraft`/`loadDraft`/`clearDraft`).
+- Each form's outer container now has a single `onBlur` handler (blur
+  events bubble in React, so one handler on the wrapping `<div>` covers
+  every field in the form — no per-input wiring needed). Leaving any
+  field writes the form's *entire* current state to that draft record
+  immediately. So the only thing that can still be lost is whatever's in
+  the field you're actively typing in at the exact moment the app gets
+  killed — everything you already tabbed/clicked away from is saved.
+- On opening a form, it checks for a leftover draft and restores it into
+  the fields automatically (silently — no dialog, just shows up filled
+  in), so resuming an interrupted "New Customer" looks like nothing
+  happened.
+- The draft is deleted once the record is actually saved for real,
+  so it doesn't linger or reappear later.
+- Wired into all four data-entry forms: `CustomerForm.tsx`, `SiteForm.tsx`,
+  `EquipmentForm.tsx`, `JobForm.tsx` (the "New Call" flow — this is the one
+  Ed actually lost data in, since it's where customer/site get created
+  inline).
+
+Verified: `tsc -b` and `vite build` both succeed cleanly with no errors
+(installed `node_modules` temporarily to run the real build in this
+sandbox, removed both `dist/` and `node_modules/` afterward — nothing
+extra committed). Not yet tested in-browser for the actual
+blur-triggers-save-and-restore behavior — first thing to check on a real
+device: type into a few fields of a New Call, switch apps (don't hit
+Save), come back, confirm everything except the very last field you were
+mid-typing is still there.
+
+### To pick this back up next
+- Ed to verify the autosave behavior on his phone (switch apps mid-form,
+  confirm it restores), alongside the still-pending nameplate OCR
+  accuracy test.

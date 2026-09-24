@@ -1,10 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useNavigate, useParams } from 'react-router-dom';
 import { db } from '../lib/db';
 import { saveRecord, makeId, logActivity } from '../lib/repo';
 import { getOwnerId } from '../auth/AuthContext';
 import { generateJobNumber } from '../lib/jobNumber';
+import { saveDraft, loadDraft, clearDraft } from '../lib/formDraft';
 import TopBar from '../components/TopBar';
 import SectionCard from '../components/SectionCard';
 import { Field, TextInput, TextArea, Select } from '../components/Field';
@@ -17,6 +18,7 @@ export default function JobForm() {
   const { id } = useParams();
   const navigate = useNavigate();
   const editing = useLiveQuery(() => (id ? db.jobs.get(id) : undefined), [id]);
+  const draftId = `job:${id ?? 'new'}`;
 
   const allCustomers = useLiveQuery(() => db.customers.toArray(), []) ?? [];
   const customers = useMemo(() => allCustomers.filter((c) => !c.archived), [allCustomers]);
@@ -49,6 +51,48 @@ export default function JobForm() {
   const [newEqSerial, setNewEqSerial] = useState('');
 
   const [saving, setSaving] = useState(false);
+
+  // Restore any in-progress work left behind if this form was closed
+  // (app switched away, browser killed, etc.) before it was saved.
+  useEffect(() => {
+    let cancelled = false;
+    loadDraft(draftId).then((d) => {
+      if (cancelled || !d) return;
+      if (typeof d.customerId === 'string') setCustomerId(d.customerId);
+      if (typeof d.siteId === 'string') setSiteId(d.siteId);
+      if (typeof d.equipmentId === 'string') setEquipmentId(d.equipmentId);
+      if (typeof d.callType === 'string') setCallType(d.callType as CallType);
+      if (typeof d.priority === 'string') setPriority(d.priority as JobPriority);
+      if (typeof d.scheduledAt === 'string') setScheduledAt(d.scheduledAt);
+      if (typeof d.workOrderNumber === 'string') setWorkOrderNumber(d.workOrderNumber);
+      if (typeof d.reasonForCall === 'string') setReasonForCall(d.reasonForCall);
+      if (typeof d.showNewCustomer === 'boolean') setShowNewCustomer(d.showNewCustomer);
+      if (typeof d.newCustomerName === 'string') setNewCustomerName(d.newCustomerName);
+      if (typeof d.newCustomerType === 'string') setNewCustomerType(d.newCustomerType as CustomerType);
+      if (typeof d.newCustomerPhone === 'string') setNewCustomerPhone(d.newCustomerPhone);
+      if (typeof d.showNewSite === 'boolean') setShowNewSite(d.showNewSite);
+      if (typeof d.newSiteName === 'string') setNewSiteName(d.newSiteName);
+      if (typeof d.newSiteAddress === 'string') setNewSiteAddress(d.newSiteAddress);
+      if (typeof d.showNewEquipment === 'boolean') setShowNewEquipment(d.showNewEquipment);
+      if (typeof d.newEqCategory === 'string') setNewEqCategory(d.newEqCategory as EquipmentCategory);
+      if (typeof d.newEqManufacturer === 'string') setNewEqManufacturer(d.newEqManufacturer);
+      if (typeof d.newEqModel === 'string') setNewEqModel(d.newEqModel);
+      if (typeof d.newEqSerial === 'string') setNewEqSerial(d.newEqSerial);
+    });
+    return () => { cancelled = true; };
+  }, [draftId]);
+
+  // Fires on leaving any field in the form below (blur bubbles), so each
+  // field you tab/click away from is saved immediately — only the field
+  // still being typed when the app gets interrupted can be lost.
+  function persistDraft() {
+    saveDraft(draftId, {
+      customerId, siteId, equipmentId, callType, priority, scheduledAt, workOrderNumber, reasonForCall,
+      showNewCustomer, newCustomerName, newCustomerType, newCustomerPhone,
+      showNewSite, newSiteName, newSiteAddress,
+      showNewEquipment, newEqCategory, newEqManufacturer, newEqModel, newEqSerial,
+    });
+  }
 
   const sitesForCustomer = useMemo(() => allSites.filter((s) => s.customer_id === customerId), [allSites, customerId]);
   const equipmentForSite = useMemo(() => allEquipment.filter((e) => e.site_id === siteId), [allEquipment, siteId]);
@@ -112,6 +156,7 @@ export default function JobForm() {
         };
         await saveRecord('jobs', updated);
         await logActivity(editing.id, 'note', 'Job details updated.');
+        await clearDraft(draftId);
         navigate(`/jobs/${editing.id}`);
       } else {
         const now = new Date().toISOString();
@@ -125,6 +170,7 @@ export default function JobForm() {
         };
         await saveRecord('jobs', job);
         await logActivity(job.id, 'created', `Call created (${CALL_TYPE_LABELS[callType]}).`);
+        await clearDraft(draftId);
         navigate(`/jobs/${job.id}`);
       }
     } finally {
@@ -137,7 +183,7 @@ export default function JobForm() {
   return (
     <div>
       <TopBar title={editing ? 'Edit Job' : 'New Call'} back />
-      <div className="p-4 space-y-3">
+      <div className="p-4 space-y-3" onBlur={persistDraft}>
         <SectionCard title="Customer & Site" subtitle="Who and where">
           <Field label="Customer">
             <Select value={customerId} onChange={(e) => { setCustomerId(e.target.value); setSiteId(''); setEquipmentId(''); setShowNewCustomer(false); }}>
