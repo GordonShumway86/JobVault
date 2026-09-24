@@ -26,7 +26,13 @@ export function isOnline() {
 export async function pushQueue() {
   if (!isSupabaseConfigured || !isOnline()) return;
   const items = await db.mutation_queue.orderBy('createdAt').toArray();
+  // Track which records had a failed write this pass so we skip their later
+  // mutations (preserving per-record write order) without blocking every
+  // other queued record behind a single bad or offline-mid-loop item.
+  const failedKeys = new Set<string>();
   for (const item of items) {
+    const key = `${item.table}:${item.recordId}`;
+    if (failedKeys.has(key)) continue;
     try {
       if (item.table === 'job_attachments') {
         await pushAttachment(item.recordId);
@@ -37,14 +43,14 @@ export async function pushQueue() {
       }
       if (item.id !== undefined) await db.mutation_queue.delete(item.id);
     } catch (err) {
+      failedKeys.add(key);
       if (item.id !== undefined) {
         await db.mutation_queue.update(item.id, {
           attempts: item.attempts + 1,
           lastError: err instanceof Error ? err.message : String(err),
         });
       }
-      // stop on first failure to preserve write order; retry next sync pass
-      break;
+      // keep going for other records; retry this one next sync pass
     }
   }
   notify();
@@ -75,13 +81,23 @@ async function pushAttachment(attachmentId: string) {
 
 export async function pullAll(ownerId: string) {
   if (!isSupabaseConfigured || !isOnline()) return;
+  // Records that still have a queued-but-unpushed mutation must not be
+  // overwritten with (now stale) server data, or a local edit that failed
+  // to push would silently revert on screen until the next sync pass.
+  const pending = await db.mutation_queue.toArray();
+  const pendingKeys = new Set(pending.map((m) => `${m.table}:${m.recordId}`));
+
   for (const table of SYNCED_TABLES) {
     const { data, error } = await supabase.from(table).select('*').eq('owner_id', ownerId);
     if (error || !data) continue;
-    await (db as any)[table].bulkPut(data);
+    const rows = data.filter((row: any) => !pendingKeys.has(`${table}:${row.id}`));
+    await (db as any)[table].bulkPut(rows);
   }
   const { data: attachments } = await supabase.from('job_attachments').select('*').eq('owner_id', ownerId);
-  if (attachments) await db.job_attachments.bulkPut(attachments);
+  if (attachments) {
+    const rows = attachments.filter((row: any) => !pendingKeys.has(`job_attachments:${row.id}`));
+    await db.job_attachments.bulkPut(rows);
+  }
   notify();
 }
 

@@ -63,8 +63,12 @@ export default function NameplateScanner({
       // Loaded on demand so it never bloats the main app bundle.
       const { createWorker } = await import('tesseract.js');
       const worker = await createWorker('eng');
-      const { data: { text } } = await worker.recognize(canvas);
-      await worker.terminate();
+      let text: string;
+      try {
+        ({ data: { text } } = await worker.recognize(canvas));
+      } finally {
+        await worker.terminate();
+      }
       setRawText(text);
       const extracted = extractNameplateFields(text);
       setFields({

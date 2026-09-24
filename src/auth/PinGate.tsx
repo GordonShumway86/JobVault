@@ -41,8 +41,20 @@ export default function PinGate({ children }: { children: ReactNode }) {
   const [checking, setChecking] = useState(false);
 
   if (!PIN_HASH) {
-    // Not configured — don't lock anyone out over a setup gap.
-    return <>{children}</>;
+    // Fail CLOSED, not open: a missing/empty PIN hash means the gate isn't
+    // configured, not that it should be skipped. A stale build or a forked
+    // deploy without this env var must not silently grant full access to
+    // customer data — see NOTES.md for the real incident this caused once.
+    return (
+      <div className="min-h-dvh flex items-center justify-center bg-zinc-950 px-6 text-center">
+        <div className="max-w-xs text-zinc-400 text-sm">
+          <div className="text-white text-lg font-bold mb-2">Setup incomplete</div>
+          App PIN is not configured for this build (VITE_APP_PIN_HASH is missing).
+          This is a safety stop, not a bug — fix the environment variable and
+          redeploy from source before this app can be used.
+        </div>
+      </div>
+    );
   }
 
   if (unlocked) {
