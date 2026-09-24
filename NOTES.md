@@ -121,3 +121,34 @@ out by password issues on other apps. Changed the auth model:
 
 **Next when you resume**: open the deployed (or locally running) app and
 confirm it lands straight on the Dashboard with no login prompt at all.
+
+---
+
+## 2026-09-24 (even later) — Added a PIN screen; repo confirmed public
+
+Ed asked a sharp question: the GitHub repo is public — can someone read the
+login off it? Checked: **no**, `.env.local` (the real credentials) was
+never committed, only a fake placeholder in `.env.example`. But that led to
+a more important gap: this is a client-side-only app, so once deployed, the
+auto-login credentials get baked into the site's own JavaScript — anyone
+who opens the live URL and digs into browser dev tools could read them out
+directly, not just view data through the app. The real protection was
+"nobody knows the URL," which is weak given this holds customer PII.
+
+Fix: added `src/auth/PinGate.tsx` — a simple PIN entry screen in front of
+the whole app (wraps everything in `main.tsx`, before routing/auth). No
+account, no server-side check, no lockout: it hashes (SHA-256) whatever you
+type and compares it to a stored hash client-side. Wrong PIN just says "try
+again," instantly, no rate limit — can't get locked out. Right PIN sets a
+flag in the browser's local storage and it won't ask again on that device.
+
+- Ed's PIN: **349871** (only the SHA-256 hash of it is in `.env.local` /
+  the built app, never the PIN itself).
+- Verified end-to-end in-browser: wrong PIN rejects and lets you retry
+  immediately, correct PIN unlocks, and it stays unlocked after a reload
+  (checked via automated browser test, screenshots taken).
+- Repo stays public (Ed didn't ask to change that) — fine now, since the
+  PIN is the actual gate, not obscurity of the GitHub repo or the URL.
+- To change the PIN later: `node -e "console.log(require('crypto').createHash('sha256').update('NEWPIN').digest('hex'))"`,
+  put the result in `VITE_APP_PIN_HASH` in `.env.local` (and wherever it's
+  deployed), rebuild/redeploy.

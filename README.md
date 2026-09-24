@@ -22,7 +22,7 @@ syncs to your own free Supabase project when you have a connection.
 
 ```
 src/
-  auth/        Supabase auth (email/password) + session context
+  auth/        PinGate (the actual lock screen) + auto-login session context
   components/  Shared UI (bottom nav, cards, form fields, photo widgets)
   lib/
     db.ts       Dexie (IndexedDB) schema — the local-first cache + outbox
@@ -49,6 +49,39 @@ you're offline, writes just pile up in the queue — nothing is lost, and the
 Photos work the same way: the image blob is stored locally right away, and
 the *upload* to Supabase Storage happens as part of that same sync pass once
 you're online.
+
+## Access & security model
+
+This app has **no traditional login** — no username/password form, no
+"forgot password," nothing to get locked out of. Instead there are two
+layers:
+
+1. **Auto-login.** The app signs itself into one fixed Supabase account
+   automatically, every time it loads. This is real auth under the hood
+   (row-level security still scopes every query to that one account), but
+   it's invisible — you never see it or type anything for it.
+2. **PIN screen.** Because this is a client-side app, the auto-login
+   credentials above are unavoidably baked into the deployed site's code —
+   anyone who found the URL and opened browser dev tools could read them
+   out. So the PIN screen (`src/auth/PinGate.tsx`) is the *actual* gate:
+   type the PIN once per device, it's checked against a stored hash (never
+   the PIN itself) with no server round-trip, and it's remembered from then
+   on. Type it wrong and it just says so — instantly, no lockout, no limit
+   on attempts.
+
+**Be honest with yourself about what this protects against**: it stops
+casual snooping (someone stumbling on the link, or browsing this public
+GitHub repo). It is *not* strong security — a determined attacker who gets
+the deployed URL could still dig the credentials out of the site's code. For
+a personal app that isn't shared or advertised anywhere, that's a reasonable
+trade. If that changes (you want to share access, or the data becomes more
+sensitive), revisit this before that happens.
+
+To change the PIN: generate a new hash and update `VITE_APP_PIN_HASH`
+(locally and wherever it's deployed):
+```bash
+node -e "console.log(require('crypto').createHash('sha256').update('NEWPIN').digest('hex'))"
+```
 
 ## Setup
 
@@ -77,15 +110,23 @@ to get locked out of.
 3. Check **Auto Confirm User** so it doesn't wait on an email you'll never
    get.
 
-### 4. Configure environment variables
+### 4. Pick a PIN
+
+This is the screen you'll actually see and type into. Pick 4–8 digits, then
+hash it:
+```bash
+node -e "console.log(require('crypto').createHash('sha256').update('YOUR_PIN').digest('hex'))"
+```
+
+### 5. Configure environment variables
 
 ```bash
 cp .env.example .env.local
-# edit .env.local with your Project URL, anon key, and the email/password
-# from step 3
+# edit .env.local with your Project URL, anon key, the email/password from
+# step 3, and the PIN hash from step 4
 ```
 
-### 5. (Optional) Seed sample data
+### 6. (Optional) Seed sample data
 
 Copy your account's UUID from Authentication → Users, then:
 
@@ -96,16 +137,16 @@ psql "$DATABASE_URL" -v owner="'<paste-user-uuid-here>'" -f supabase/seed.sql
 (Skip this — the app works fine with zero data; you'll just be creating your
 first real customer/job instead of sample ones.)
 
-### 6. Run it
+### 7. Run it
 
 ```bash
 npm run dev
 ```
 
-Open the printed local URL — it signs itself in and goes straight to the
-Dashboard.
+Open the printed local URL, enter your PIN, and it signs itself in and goes
+straight to the Dashboard.
 
-### 6. Install it on your devices
+### 8. Install it on your devices
 
 - **iPhone**: open the deployed URL in Safari → Share → *Add to Home Screen*.
 - **Windows 11**: open it in Edge or Chrome → the install icon appears in the
@@ -124,9 +165,11 @@ and sync automatically next time you have signal.
 
 ## What's complete (Phase 1)
 
-- Auto-login (no login screen) — one fixed Supabase account backs the whole
-  app, so there's nothing to type and nothing to get locked out of, while
-  still keeping real auth + row-level security under the hood
+- Auto-login (no login *form*) backed by a PIN lock screen — one fixed
+  Supabase account backs the whole app with real auth + row-level security
+  under the hood, and a simple client-side PIN (hashed, no lockout, no
+  server round-trip) is the actual gate against casual access to the
+  deployed site — see "Access & security model" above
 - Full relational schema: customers, sites, equipment, jobs, job activity,
   photos/attachments, parts, quotes, vendor documents, diagnostic readings,
   follow-up tasks, user settings — with row-level security scoped by owner
