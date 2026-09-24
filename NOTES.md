@@ -411,3 +411,69 @@ real-world nameplate photo text once there's real OCR output to look at.
   feature that'd want a paid LLM API).
 - Nameplate scanner needs a real on-device test with actual internet to
   validate OCR accuracy and tune the regex patterns if needed.
+
+---
+
+## 2026-09-25 (later) — Two-agent review round 2 (functionality + security)
+
+Ed asked for another double-check pass, same pattern as 2026-09-24: one
+sub-agent for code/functionality, one for security, both reviewing the
+whole codebase (still no separate base branch to diff against), fixing
+confirmed issues directly rather than just reporting them.
+
+### Code/functionality review — 3 bugs found and fixed
+1. **`src/lib/sync.ts` `pushQueue()` — one failed sync item blocked the
+   entire offline queue.** The loop `break`'d on the first error, so a
+   single bad or transiently-failing queued mutation (any table) prevented
+   every other queued record from ever syncing, since the same failing
+   item would be hit first again next pass. Fixed: now skips only that
+   record's own later mutations and keeps syncing everything else,
+   preserving per-record write order.
+2. **`src/lib/sync.ts` `pullAll()` — could silently overwrite unsynced
+   local edits.** It unconditionally wrote server data over local
+   IndexedDB records, including ones with a pending, not-yet-pushed edit
+   queued — an offline edit could revert on screen the moment a pull ran.
+   Fixed: now skips writing any record that still has a pending mutation
+   queued.
+3. **`src/components/NameplateScanner.tsx` — Tesseract OCR worker leaked
+   on scan failure.** `worker.terminate()` only ran after a successful
+   scan; a failed `recognize()` left the worker (a Web Worker + WASM
+   instance) running. Fixed: wrapped in try/finally so it always
+   terminates.
+
+### Security review — found and fixed one real access-control bug
+**`src/auth/PinGate.tsx` fail-open bug, confirmed still present in code**
+(not just the stale-build symptom fixed back on 2026-09-24): if
+`VITE_APP_PIN_HASH` is ever missing or empty at build time, the code
+itself — by design, not by accident — rendered the full app with no PIN
+prompt at all, giving anyone with the URL full access to all customer
+data. This is the same failure mode that actually happened once in
+production (see 2026-09-24 "Deployed to Vercel," step 7) — that time it
+was fixed by forcing a fresh build, but the underlying code path was never
+changed, so the same thing could still happen from any future stale or
+misconfigured deploy.
+
+Fixed: the missing-hash path now fails **closed** — it shows a "Setup
+incomplete" screen instead of the app. Doesn't touch the accepted
+no-login/auto-login design at all, just removes a silent full-bypass path
+the design was never meant to have.
+
+Both sub-agents independently found and fixed this same bug in parallel
+(their edits landed identically) — no conflict, nothing lost.
+
+Everything else checked out clean: no real secrets anywhere in the repo
+or git history, `.env.local` still correctly gitignored and never
+committed, RLS policies still sound and owner-scoped on every table,
+storage policies still correctly scope photo access, no injection risks
+in the OCR code, build succeeds with no errors. The one already-known,
+already-deferred gap (owner_id not cross-checked on related records like
+parts-on-a-job) is still open and still low-urgency for the
+single-account reality — unchanged from the 2026-09-24 review.
+
+Commit: `a544347` (sync fixes + OCR leak fix + PinGate fail-closed),
+pushed to `claude/notes-md-review-iboqzl`.
+
+### To pick this back up next
+- Same Phase 2 remaining items as above.
+- The owner_id cross-check gap is still the one open, deliberately-deferred
+  hardening item — worth doing before any multi-user future, not urgent now.
