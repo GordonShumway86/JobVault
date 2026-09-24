@@ -477,3 +477,40 @@ pushed to `claude/notes-md-review-iboqzl`.
 - Same Phase 2 remaining items as above.
 - The owner_id cross-check gap is still the one open, deliberately-deferred
   hardening item — worth doing before any multi-user future, not urgent now.
+
+---
+
+## 2026-09-25 (even later) — Scope cut: no vendor quote OCR, no Quote Builder
+
+Ed clarified two Phase 2 items that were never actually wanted:
+
+- **Vendor quote/receipt "OCR review"**: not needed. Ed just wants to
+  photograph a vendor quote (paper or on his phone) and attach it to the
+  job he's on, to reference later — no data extraction required. Checked
+  the app: **this already exists**, no new code needed. The general
+  `PhotoUploader` component on Job Detail already supports "Choose from
+  Library" or "Take Photo," and `vendor_quote` is already one of the
+  photo categories (alongside `parts_receipt`, `invoice`, etc.) — so
+  picking a library photo, tagging it "Vendor Quote," and saving it
+  against the current job is already fully working today. Removed
+  "vendor quote/receipt OCR review" from the Phase 2 plan entirely — not
+  a build item, just use the existing photo attachment flow.
+- **Quote Builder**: not needed. Ed's office handles quoting/pricing, not
+  him — he has no use for an in-app quote builder. Removed from the
+  Phase 2 plan. The `quotes` / `quote_line_items` DB tables and types
+  still exist (unused, harmless) — left as-is rather than migrated out,
+  since removing them isn't necessary and a schema change carries more
+  risk than value here; can be dropped later if they get in the way, but
+  not chasing that now.
+
+**Revised Phase 2 remaining, replacing the earlier list:**
+1. Nameplate scanner real-device OCR accuracy test (Ed doing this next).
+2. Voice-to-text notes (Web Speech API, free/built-in).
+3. Parts tracking UI (parts ordering/status per job) — Quote Builder
+   dropped, parts tracking itself still wanted.
+4. AI-generated editable service summary (the one feature that'd want a
+   paid LLM API) — still optional/last, per original spec.
+
+### To pick this back up next
+- Ed is testing the nameplate scanner on his phone next — waiting on that
+  before starting anything else in Phase 2.
