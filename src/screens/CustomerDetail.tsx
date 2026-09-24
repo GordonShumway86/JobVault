@@ -45,7 +45,7 @@ export default function CustomerDetail() {
             {sites.map((s) => (
               <Link key={s.id} to={`/sites/${s.id}`} className="block rounded-xl border border-zinc-800 bg-zinc-900/60 p-4">
                 <div className="text-white font-semibold text-sm">{s.name}</div>
-                <div className="text-zinc-500 text-xs mt-0.5">{s.address}</div>
+                <div className="text-zinc-500 text-xs mt-0.5">{s.address}{s.city ? `, ${s.city}` : ''}{s.state ? `, ${s.state}` : ''}</div>
               </Link>
             ))}
           </div>
@@ -61,7 +61,7 @@ export default function CustomerDetail() {
                   <span className="text-white text-sm font-medium">{j.job_number}</span>
                   <StatusBadge status={j.status} />
                 </div>
-                {j.customer_complaint && <div className="text-zinc-500 text-xs mt-1 truncate">{j.customer_complaint}</div>}
+                {j.reason_for_call && <div className="text-zinc-500 text-xs mt-1 truncate">{j.reason_for_call}</div>}
               </Link>
             ))}
           </div>

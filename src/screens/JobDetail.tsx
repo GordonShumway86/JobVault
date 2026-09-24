@@ -102,7 +102,9 @@ export default function JobDetail() {
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
             <Link to={`/customers/${customer?.id}`} className="text-white font-bold text-lg truncate block">{customer?.name ?? '—'}</Link>
-            <Link to={`/sites/${site?.id}`} className="text-zinc-400 text-sm truncate block">{site?.name} · {site?.address}</Link>
+            <Link to={`/sites/${site?.id}`} className="text-zinc-400 text-sm truncate block">
+              {site?.name}{site?.address ? ` — ${site.address}` : ''}{site?.city ? `, ${site.city}` : ''}{site?.state ? `, ${site.state}` : ''}
+            </Link>
             {equipment && (
               <Link to={`/equipment/${equipment.id}`} className="text-zinc-500 text-xs truncate block mt-0.5">
                 {equipment.nickname || `${equipment.manufacturer ?? ''} ${equipment.model_number ?? ''}`}
@@ -114,11 +116,12 @@ export default function JobDetail() {
         <div className="flex items-center gap-3 mt-2 text-xs text-zinc-500">
           <span>{CALL_TYPE_LABELS[job.call_type]}</span>
           {job.scheduled_at && <span>· {format(parseISO(job.scheduled_at), 'MMM d, h:mm a')}</span>}
+          {job.work_order_number && <span>· WO# {job.work_order_number}</span>}
         </div>
-        {job.customer_complaint && (
+        {job.reason_for_call && (
           <div className="mt-2.5 text-sm text-zinc-300 bg-zinc-900/60 rounded-lg p-3 border border-zinc-800">
-            <span className="text-zinc-500 text-xs font-semibold block mb-1">COMPLAINT</span>
-            {job.customer_complaint}
+            <span className="text-zinc-500 text-xs font-semibold block mb-1">REASON FOR CALL</span>
+            {job.reason_for_call}
           </div>
         )}
       </div>

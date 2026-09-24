@@ -29,7 +29,8 @@ export default function JobForm() {
   const [callType, setCallType] = useState<CallType>(editing?.call_type ?? 'service_diagnostic');
   const [priority, setPriority] = useState<JobPriority>(editing?.priority ?? 'normal');
   const [scheduledAt, setScheduledAt] = useState(editing?.scheduled_at?.slice(0, 16) ?? '');
-  const [complaint, setComplaint] = useState(editing?.customer_complaint ?? '');
+  const [workOrderNumber, setWorkOrderNumber] = useState(editing?.work_order_number ?? '');
+  const [reasonForCall, setReasonForCall] = useState(editing?.reason_for_call ?? '');
 
   // Inline "create new" mini-forms
   const [showNewCustomer, setShowNewCustomer] = useState(false);
@@ -106,7 +107,8 @@ export default function JobForm() {
         const updated = {
           ...editing, customer_id: custId, site_id: siteIdFinal, equipment_id: eqId,
           call_type: callType, priority, scheduled_at: scheduledAt ? new Date(scheduledAt).toISOString() : null,
-          customer_complaint: complaint || null, updated_at: new Date().toISOString(),
+          work_order_number: workOrderNumber || null, reason_for_call: reasonForCall || null,
+          updated_at: new Date().toISOString(),
         };
         await saveRecord('jobs', updated);
         await logActivity(editing.id, 'note', 'Job details updated.');
@@ -114,10 +116,10 @@ export default function JobForm() {
       } else {
         const now = new Date().toISOString();
         const job = {
-          id: makeId(), owner_id: ownerId, job_number: generateJobNumber(), customer_id: custId,
-          site_id: siteIdFinal, equipment_id: eqId, call_type: callType, status: 'new' as const, priority,
-          scheduled_at: scheduledAt ? new Date(scheduledAt).toISOString() : null, arrived_at: null, departed_at: null,
-          customer_complaint: complaint || null, technician_notes: null, diagnosis: null, work_performed: null,
+          id: makeId(), owner_id: ownerId, job_number: generateJobNumber(), work_order_number: workOrderNumber || null,
+          customer_id: custId, site_id: siteIdFinal, equipment_id: eqId, call_type: callType, status: 'new' as const,
+          priority, scheduled_at: scheduledAt ? new Date(scheduledAt).toISOString() : null, arrived_at: null, departed_at: null,
+          reason_for_call: reasonForCall || null, technician_notes: null, diagnosis: null, work_performed: null,
           recommendations: null, follow_up_instructions: null, internal_notes: null, customer_visible_notes: null,
           next_follow_up_date: null, return_visit_required: false, completed_at: null, created_at: now, updated_at: now,
         };
@@ -166,7 +168,11 @@ export default function JobForm() {
                 <Field label="Site">
                   <Select value={siteId} onChange={(e) => { setSiteId(e.target.value); setEquipmentId(''); }}>
                     <option value="">Select site…</option>
-                    {sitesForCustomer.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                    {sitesForCustomer.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}{s.address ? ` — ${s.address}` : ''}{s.city ? `, ${s.city}` : ''}{s.state ? `, ${s.state}` : ''}
+                      </option>
+                    ))}
                   </Select>
                 </Field>
               )}
@@ -234,10 +240,13 @@ export default function JobForm() {
             </Field>
             <Field label="Scheduled"><TextInput type="datetime-local" value={scheduledAt} onChange={(e) => setScheduledAt(e.target.value)} /></Field>
           </div>
+          <Field label="Work order #" hint="Customer/property manager's PO or work order reference">
+            <TextInput value={workOrderNumber} onChange={(e) => setWorkOrderNumber(e.target.value)} placeholder="e.g. WO-4471829" />
+          </Field>
         </SectionCard>
 
-        <SectionCard title="Customer Complaint">
-          <TextArea rows={4} value={complaint} onChange={(e) => setComplaint(e.target.value)} placeholder="What's the issue? (type or paste dictated text)" />
+        <SectionCard title="Reason for Call">
+          <TextArea rows={4} value={reasonForCall} onChange={(e) => setReasonForCall(e.target.value)} placeholder="What's the issue? (type or paste dictated text)" />
         </SectionCard>
 
         <button

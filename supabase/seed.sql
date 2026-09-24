@@ -29,6 +29,6 @@ e as (
   from s
   returning id
 )
-insert into jobs (owner_id, customer_id, site_id, equipment_id, call_type, status, priority, scheduled_at, customer_complaint)
+insert into jobs (owner_id, customer_id, site_id, equipment_id, call_type, status, priority, scheduled_at, reason_for_call)
 select :'owner', c.id, s.id, e.id, 'service_diagnostic', 'new', 'normal', now() + interval '1 day', 'Tenants on 3rd floor reporting warm air from vents since yesterday.'
 from c, s, e;

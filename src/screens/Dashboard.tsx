@@ -38,7 +38,7 @@ export default function Dashboard() {
     ? open.filter((j) => {
         const c = customerMap.get(j.customer_id);
         const s = siteMap.get(j.site_id);
-        const haystack = `${j.job_number} ${c?.name ?? ''} ${s?.name ?? ''} ${s?.address ?? ''} ${j.customer_complaint ?? ''}`.toLowerCase();
+        const haystack = `${j.job_number} ${j.work_order_number ?? ''} ${c?.name ?? ''} ${s?.name ?? ''} ${s?.address ?? ''} ${s?.city ?? ''} ${j.reason_for_call ?? ''}`.toLowerCase();
         return haystack.includes(q.toLowerCase());
       })
     : open;

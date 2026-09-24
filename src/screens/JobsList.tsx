@@ -42,8 +42,8 @@ export default function JobsList() {
       const s = siteMap.get(j.site_id);
       const e = j.equipment_id ? equipmentMap.get(j.equipment_id) : undefined;
       const haystack = [
-        j.job_number, c?.name, s?.name, s?.address, e?.model_number, e?.serial_number,
-        j.customer_complaint, j.technician_notes, j.diagnosis, j.work_performed,
+        j.job_number, j.work_order_number, c?.name, s?.name, s?.address, s?.city, s?.state,
+        e?.model_number, e?.serial_number, j.reason_for_call, j.technician_notes, j.diagnosis, j.work_performed,
       ].filter(Boolean).join(' ').toLowerCase();
       return haystack.includes(needle);
     });
@@ -94,7 +94,9 @@ export default function JobsList() {
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <div className="text-white font-semibold text-sm truncate">{c?.name ?? 'Unknown customer'}</div>
-                  <div className="text-zinc-500 text-xs truncate">{s?.name}{e ? ` · ${e.nickname || e.model_number || ''}` : ''}</div>
+                  <div className="text-zinc-500 text-xs truncate">
+                    {s?.name}{s?.city ? ` — ${s.city}${s.state ? `, ${s.state}` : ''}` : ''}{e ? ` · ${e.nickname || e.model_number || ''}` : ''}
+                  </div>
                 </div>
                 <StatusBadge status={job.status} />
               </div>

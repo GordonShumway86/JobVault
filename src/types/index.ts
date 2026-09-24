@@ -110,6 +110,7 @@ export interface Job {
   id: string;
   owner_id: string;
   job_number: string;
+  work_order_number: string | null;
   customer_id: string;
   site_id: string;
   equipment_id: string | null;
@@ -119,7 +120,7 @@ export interface Job {
   scheduled_at: string | null;
   arrived_at: string | null;
   departed_at: string | null;
-  customer_complaint: string | null;
+  reason_for_call: string | null;
   technician_notes: string | null;
   diagnosis: string | null;
   work_performed: string | null;
