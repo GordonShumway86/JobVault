@@ -1,12 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { supabase, isSupabaseConfigured } from '../lib/supabase';
-import { useAuth } from '../auth/AuthContext';
 import { pendingMutationCount, isOnline, onSyncStateChange } from '../lib/sync';
 import TopBar from '../components/TopBar';
 
 export default function More() {
-  const { user } = useAuth();
   const [pending, setPending] = useState(0);
   const [online, setOnline] = useState(isOnline());
 
@@ -33,7 +30,6 @@ export default function More() {
           <div className="text-zinc-500 text-xs mt-1">
             {pending === 0 ? 'All changes synced.' : `${pending} change${pending === 1 ? '' : 's'} waiting to sync.`}
           </div>
-          {user?.email && <div className="text-zinc-600 text-xs mt-2">Signed in as {user.email}</div>}
         </div>
 
         <div className="rounded-xl border border-zinc-800 divide-y divide-zinc-800 overflow-hidden">
@@ -44,15 +40,6 @@ export default function More() {
             Customers <span className="text-zinc-600">›</span>
           </Link>
         </div>
-
-        {isSupabaseConfigured && (
-          <button
-            onClick={() => supabase.auth.signOut()}
-            className="w-full rounded-lg bg-zinc-900 border border-zinc-800 text-red-400 text-sm font-semibold py-3.5"
-          >
-            Sign Out
-          </button>
-        )}
       </div>
     </div>
   );

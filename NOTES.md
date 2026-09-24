@@ -90,6 +90,34 @@ free to run, works offline and syncs when back online.
 - Verified in-browser: app now shows the real Sign In screen instead of the
   "not configured" warning — Supabase connection confirmed working.
 
-**Next when you resume**: sign up for your one owner account from the app's
-Sign In screen (any email/password — this is a single-user app, so whatever
-you pick becomes THE account), then start creating real customers/jobs.
+---
+
+## 2026-09-24 (later still) — Removed the login screen
+
+Ed doesn't want a login screen — bad past experiences with getting locked
+out by password issues on other apps. Changed the auth model:
+
+- The app now logs itself in **automatically**, every time it opens, using
+  one fixed account. There is no login UI anymore (`src/auth/Login.tsx`
+  deleted). Nothing to type, nothing to get locked out of.
+- Still real Supabase auth + row-level security under the hood — the
+  account is just invisible to Ed. Credentials live in `.env.local`
+  (`VITE_APP_EMAIL` / `VITE_APP_PASSWORD`), which stays out of GitHub.
+- Created the one owner account (`owner@service-log.app`, random 32-char
+  password) directly in the Supabase database via the Supabase MCP
+  connector (this sandbox's network blocks the Supabase Auth API directly,
+  so went through the DB instead — verified the password hash matches
+  before wiring it up).
+- **Known tradeoff, discussed with Ed and accepted**: since there's no
+  password gate, anyone who gets the app's web link could see the data too.
+  Fine for personal, not-publicly-shared use — revisit if that changes.
+- Could not fully live-test the auto-login from this sandbox (its own
+  network policy blocks `supabase.co` — confirmed via a direct curl test,
+  not an app bug). Verified instead: TypeScript compiles clean, production
+  build succeeds, the account's password hash checks out in the database,
+  and the error-handling path renders correctly when the network call fails.
+  **Real live-device test still needed** — first thing to check once this
+  is opened on an actual phone/laptop with normal internet access.
+
+**Next when you resume**: open the deployed (or locally running) app and
+confirm it lands straight on the Dashboard with no login prompt at all.

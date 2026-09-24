@@ -65,17 +65,29 @@ npm install
    then `supabase/migrations/0002_storage.sql`.
 3. In Settings → API, copy your **Project URL** and **anon public key**.
 
-### 3. Configure environment variables
+### 3. Create your app account (no login screen)
+
+This app has no visible sign-in — it logs itself in automatically every
+time it opens, using one fixed account. There's nothing to type and nothing
+to get locked out of.
+
+1. In Supabase, go to Authentication → Users → **Add user**.
+2. Pick any email (it doesn't need to be real — e.g. `owner@example.com`)
+   and a long random password.
+3. Check **Auto Confirm User** so it doesn't wait on an email you'll never
+   get.
+
+### 4. Configure environment variables
 
 ```bash
 cp .env.example .env.local
-# edit .env.local with your Project URL and anon key
+# edit .env.local with your Project URL, anon key, and the email/password
+# from step 3
 ```
 
-### 4. (Optional) Seed sample data
+### 5. (Optional) Seed sample data
 
-Create your first user in Supabase (Authentication → Users → Add user, or just
-sign up from the app once it's running). Copy that user's UUID, then:
+Copy your account's UUID from Authentication → Users, then:
 
 ```bash
 psql "$DATABASE_URL" -v owner="'<paste-user-uuid-here>'" -f supabase/seed.sql
@@ -84,14 +96,14 @@ psql "$DATABASE_URL" -v owner="'<paste-user-uuid-here>'" -f supabase/seed.sql
 (Skip this — the app works fine with zero data; you'll just be creating your
 first real customer/job instead of sample ones.)
 
-### 5. Run it
+### 6. Run it
 
 ```bash
 npm run dev
 ```
 
-Open the printed local URL. Sign up with an email/password (this is a
-single-owner app — the account you create is the only one that matters).
+Open the printed local URL — it signs itself in and goes straight to the
+Dashboard.
 
 ### 6. Install it on your devices
 
@@ -112,7 +124,9 @@ and sync automatically next time you have signal.
 
 ## What's complete (Phase 1)
 
-- Email/password auth via Supabase (single owner account)
+- Auto-login (no login screen) — one fixed Supabase account backs the whole
+  app, so there's nothing to type and nothing to get locked out of, while
+  still keeping real auth + row-level security under the hood
 - Full relational schema: customers, sites, equipment, jobs, job activity,
   photos/attachments, parts, quotes, vendor documents, diagnostic readings,
   follow-up tasks, user settings — with row-level security scoped by owner
