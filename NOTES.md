@@ -153,3 +153,136 @@ flag in the browser's local storage and it won't ask again on that device.
 - To change the PIN later: `node -e "console.log(require('crypto').createHash('sha256').update('NEWPIN').digest('hex'))"`,
   put the result in `VITE_APP_PIN_HASH` in `.env.local` (and wherever it's
   deployed), rebuild/redeploy.
+
+---
+
+## 2026-09-24 (evening) — Two-agent review, then real deployment to Vercel
+
+### Code + security review (Ed's request: "spin up two agents")
+
+Ran the `code-review` and `security-review` skills against the whole
+codebase (no separate base branch to diff against — this repo's only
+branch is the feature branch, so reviewed everything from scratch via
+sub-agents).
+
+**Code review found a real problem**: I had written the actual PIN
+("349871" at the time) in plaintext into this NOTES.md file, in a public
+repo — completely defeating the PIN gate the same commit introduced.
+Fixed by redacting it from the file going forward (see entry above), and
+separately by rotating the PIN itself, since editing a file doesn't erase
+it from git history in a public repo (confirmed: the old PIN is still
+recoverable from history; it's just dead/useless now since it's rotated).
+Also added a "Lock App" button (`lockApp()` in `PinGate.tsx`, wired into
+More) — there had been no way to re-lock the app on a device once
+unlocked.
+
+**Security review**: no SQL injection, XSS, or auth-bypass found. RLS
+(row-level security) policies and the PIN/auto-login logic are sound for
+today's single-account reality. One real but low-urgency design gap
+logged for whenever a second account ever exists: the database doesn't
+yet cross-check that related records (e.g. a part on a job) belong to the
+same owner as the job itself — harden this before any multi-user future,
+not urgent now.
+
+### PIN rotation
+
+Old PIN retired. **Current PIN: not written anywhere in this repo or in
+Google Drive notes, by design** — it lives only as a SHA-256 hash in
+`.env.local` (gitignored) and in Vercel's environment variables. Ask Ed
+directly if you need it. Verified by searching the *entire* git history
+(`git log -p --all`) for both the old and new PIN strings — old one shows
+up (harmless, retired), new one has zero matches anywhere.
+
+### Deployed to Vercel — a long, bumpy road, now resolved
+
+Ed connected Vercel (GitHub-linked) and imported the repo himself through
+the mobile site — walked him through: branch selection
+(`claude/service-log-hvac-app-ssx82g`), environment variables, skipping
+the "Supabase" Vercel marketplace integration (would have created a
+second, unwanted Supabase project), and clicking Create Project → Deploy.
+
+**What went wrong (all now fixed)**:
+1. First attempt: Ed pasted a multi-line block of `KEY=VALUE` pairs into
+   a single Value field instead of one value per field — corrupted the
+   Supabase anon key with trailing garbage, causing an "invalid
+   Authorization header" error.
+2. Vercel's mobile UI made this hard to fix: env vars marked "Secret" are
+   write-only (can't be viewed after saving, even by the person who set
+   them) and the list re-sorts by "Last Updated" after every edit, so
+   tapping a row right after editing another one could land on the wrong
+   row. Worked around by deleting and re-adding all 5 vars one at a time,
+   switching type from "Secret" to "Config" (Vercel's own suggestion,
+   since `VITE_`-prefixed vars are public in the bundle regardless of
+   that label).
+3. Even after careful redo, `VITE_APP_EMAIL` / `VITE_APP_PASSWORD` kept
+   failing Supabase's login check ("Invalid login credentials") despite
+   Ed confirming the values looked right on-screen and copy-pasting
+   (never hand-typing) throughout. Verified server-side twice via the
+   Supabase MCP connector that the account and password hash were
+   genuinely correct — the corruption was happening somewhere in
+   Vercel's mobile form, never fully diagnosed at the character level.
+4. **I almost made a real mistake here**: to route around the flaky
+   mobile form, I started hardcoding the real password directly into
+   `AuthContext.tsx` — which would have put a live secret straight into
+   this **public** GitHub repo's source, the exact class of mistake
+   already caught once with the PIN. A safety check in the harness
+   blocked the next command and flagged why before it got committed.
+   Reverted immediately (confirmed `git diff` was clean after). Lesson:
+   don't solve "hard to enter via a form" by hardcoding into version
+   control just because the value already ends up in the public JS
+   bundle either way — those are different exposure surfaces (repo
+   history is permanent and human-browsable; the bundle isn't
+   source-searchable on GitHub).
+5. Real fix: rotated `VITE_APP_PASSWORD` to a simpler value (all
+   lowercase letters + digits, no mixed case or underscores — much less
+   prone to mobile keyboard/clipboard corruption), updated it directly in
+   Supabase via SQL (verified the hash matches), and had Ed connect the
+   **Vercel MCP connector** (`claude.ai` → Settings → Connectors) so I
+   could read/write the project directly instead of guiding mobile taps.
+6. Using the Vercel connector, overwrote all 5 environment variables
+   directly via `edit_project_env` (bypassing the mobile form entirely)
+   and confirmed each one server-side.
+7. **Found one more real bug**: my first attempt to apply the fix used
+   Vercel's "redeploy an existing deployment" API, which apparently
+   doesn't reliably rebuild with the *current* environment variable
+   values (behaved like it reused a stale build). Ed tested and got
+   auto-logged straight past the PIN screen with no prompt at all — a
+   real access-control bug, not expected behavior. Root cause: if
+   `VITE_APP_PIN_HASH` is empty at build time, `PinGate.tsx` intentionally
+   skips the gate ("don't lock anyone out over a setup gap") — so a stale
+   build without that value baked in would silently let anyone straight
+   through. Fixed by triggering a **genuinely fresh build from source**
+   (`create_deployment` with `gitSource` + `forceNew: 1`, not a redeploy
+   of an existing build ID). Verified after: Ed cleared his phone's
+   cached site data, reloaded, saw the PIN screen, entered the PIN,
+   worked correctly.
+
+**Current live URL**: `job-vault-six-mu.vercel.app` — confirmed working,
+PIN gate + auto-login both verified functioning correctly by Ed on his
+actual iPhone.
+
+**Takeaway for next time env vars need to change on Vercel**: use the
+Vercel MCP connector's `edit_project_env` directly, then
+`create_deployment` with `gitSource` (a real fresh build) — never rely on
+"redeploy an existing deployment" when env vars changed, and never ask Ed
+to hand-edit multiple Vercel env vars through the mobile site again if it
+can be avoided; the mobile form has real usability problems (write-only
+secrets, list re-sorting, easy to paste multi-line blocks into one field).
+
+### Clarified: photo-to-form autofill is NOT built yet
+
+Ed asked why photos don't fill in form fields. Confirmed to him this is
+expected — Phase 1 photo capture just attaches/categorizes a photo, no
+extraction happens. Nameplate OCR autofill is the first Phase 2 item
+(still not started) — reuses the free Tesseract.js approach from
+`Model-Photo-to-Manual-Lookup`.
+
+### To pick this back up next
+- Phase 2, first task: nameplate photo → OCR → editable review screen →
+  autofill Equipment form fields (manufacturer/model/serial/etc.), using
+  Tesseract.js client-side, no paid API.
+- Live app: `job-vault-six-mu.vercel.app` — PIN required, ask Ed.
+- Vercel connector and Supabase connector are both connected in this
+  Claude session as of today; a fresh session will need Ed to reconnect
+  them (or already have them from claude.ai account-level settings —
+  unconfirmed whether connector auth persists across sessions).
