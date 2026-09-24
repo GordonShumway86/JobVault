@@ -70,3 +70,26 @@ free to run, works offline and syncs when back online.
   in `README.md`.
 - Was about to: create the Supabase project and run migrations, OR jump
   straight into Phase 2 nameplate OCR — not yet decided.
+
+---
+
+## 2026-09-24 (later) — Supabase wired up
+
+- Reused an existing empty Supabase project (`ed95667@gmail.com's Project`,
+  ref `bxagejspufjuffadxkkl`) rather than creating a new one — confirmed it
+  had zero tables/types/migrations before reusing it, so no conflict.
+- Ran `0001_init.sql` and `0002_storage.sql` against it via the Supabase MCP
+  connector (all 13 tables created, RLS enabled on every one).
+- Fixed two minor Supabase linter warnings (function search_path, pg_trgm
+  extension location) in a follow-up `0003_lint_fixes` migration — not saved
+  as a file in `supabase/migrations/` yet, just applied directly. If you want
+  it version-controlled, ask to have it added as a migration file.
+- `.env.local` created locally with the real Project URL + anon key (this
+  file is git-ignored — it does NOT get pushed to GitHub, by design, since it
+  has your credentials).
+- Verified in-browser: app now shows the real Sign In screen instead of the
+  "not configured" warning — Supabase connection confirmed working.
+
+**Next when you resume**: sign up for your one owner account from the app's
+Sign In screen (any email/password — this is a single-user app, so whatever
+you pick becomes THE account), then start creating real customers/jobs.
