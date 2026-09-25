@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { db } from '../lib/db';
 import { saveRecord, makeId, logActivity } from '../lib/repo';
 import { getOwnerId } from '../auth/AuthContext';
@@ -18,9 +18,19 @@ export default function PhotoUploader({
   const cameraInput = useRef<HTMLInputElement>(null);
   const libraryInput = useRef<HTMLInputElement>(null);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [category, setCategory] = useState<PhotoCategory>('general_job_photo');
   const [internalOnly, setInternalOnly] = useState(false);
   const [caption, setCaption] = useState('');
+
+  // Blob URL is created here (not inline in JSX) so exactly one exists at a
+  // time and gets revoked — otherwise a new one leaks on every re-render.
+  useEffect(() => {
+    if (!pendingFile) { setPreviewUrl(null); return; }
+    const url = URL.createObjectURL(pendingFile);
+    setPreviewUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [pendingFile]);
 
   function onFilePicked(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -84,9 +94,9 @@ export default function PhotoUploader({
       <input ref={cameraInput} type="file" accept="image/*" capture="environment" className="hidden" onChange={onFilePicked} />
       <input ref={libraryInput} type="file" accept="image/*" className="hidden" onChange={onFilePicked} />
 
-      {pendingFile && (
+      {pendingFile && previewUrl && (
         <div className="mt-3 rounded-lg border border-zinc-800 bg-zinc-950/60 p-3 space-y-2.5">
-          <img src={URL.createObjectURL(pendingFile)} alt="preview" className="w-full max-h-56 object-contain rounded-lg bg-black" />
+          <img src={previewUrl} alt="preview" className="w-full max-h-56 object-contain rounded-lg bg-black" />
           <div>
             <span className="block text-xs font-medium text-zinc-400 mb-1">Category</span>
             <select

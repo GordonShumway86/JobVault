@@ -878,3 +878,50 @@ right counts/wording and that Cancel leaves everything untouched.
 ### To pick this back up next
 - **Not yet deployed** — same as the last two batches, sitting on
   `claude/notes-md-review-iboqzl` only.
+
+---
+
+## 2026-09-25 (final for now) — Second-opinion review from Gemini, one real fix taken
+
+Ed sent the full source to Gemini for an independent review and pasted its
+findings back here. Went through each one against the actual code rather
+than taking either AI's word for it:
+
+1. **"Dashboard.tsx is truncated, won't build"** — false. Re-ran
+   `tsc -b && vite build`, passes clean, file is complete. Almost
+   certainly Gemini's own input got cut off (a context/length limit on the
+   prompt side, not a real bug) and it mistook that for a broken file.
+2. **"Auth/PIN gate is a security vulnerability, use real Supabase Auth
+   instead"** — the observation (client env vars land in the public JS
+   bundle) is true and already known/documented; the suggested fix isn't
+   a fix — the app already uses `supabase.auth.signInWithPassword`, and
+   *some* credential has to live client-side for zero-friction auto-login
+   to work at all, which is the point Ed explicitly wanted (no login
+   screen, can't get locked out). Left as-is, both AIs agreed.
+3. **"Cascade delete / sync queue race condition"** — not borne out by the
+   code: `pushQueue` only removes a queue entry after its Supabase call
+   succeeds (inside the `try`, after the `await`), and `deleteCustomerCascade`
+   was already stress-tested end-to-end a few messages earlier this
+   session. Left as-is.
+4. **"Memory leaks in PhotoUploader and NameplateScanner"** — split
+   verdict:
+   - `PhotoUploader.tsx`: real, fixed. `URL.createObjectURL(pendingFile)`
+     was called inline in JSX, creating a fresh blob URL on every
+     re-render with the old one never revoked. Moved it into a `useEffect`
+     keyed on `pendingFile` that revokes the previous URL before creating
+     the next one (and on unmount). Verified in a real browser: preview
+     still renders correctly from a real photo, and disappears cleanly on
+     Cancel.
+   - `NameplateScanner.tsx`: suggestion (a single persistent, reused
+     Tesseract worker) rejected by both AIs — the scanner is used
+     sparingly per job, and a persistent worker would keep several MB of
+     WASM resident in memory permanently instead of only during an active
+     scan, which is worse on a phone, not better. The real bug here
+     (worker not terminated on OCR failure) was already fixed earlier
+     this session.
+
+`tsc -b` and `vite build` both pass clean after the one fix.
+
+### To pick this back up next
+- This fix, plus everything from the batch before it, is still only on
+  `claude/notes-md-review-iboqzl` — not yet deployed.
