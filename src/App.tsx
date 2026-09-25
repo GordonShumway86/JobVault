@@ -8,6 +8,7 @@ import JobDetail from './screens/JobDetail';
 import CustomersList from './screens/CustomersList';
 import CustomerForm from './screens/CustomerForm';
 import CustomerDetail from './screens/CustomerDetail';
+import DispatchScan from './screens/DispatchScan';
 import SiteForm from './screens/SiteForm';
 import SiteDetail from './screens/SiteDetail';
 import EquipmentForm from './screens/EquipmentForm';
@@ -46,6 +47,7 @@ export default function App() {
         <Route path="/jobs/:id/edit" element={<JobForm />} />
         <Route path="/customers" element={<CustomersList />} />
         <Route path="/customers/new" element={<CustomerForm />} />
+        <Route path="/customers/scan" element={<DispatchScan />} />
         <Route path="/customers/:id" element={<CustomerDetail />} />
         <Route path="/customers/:id/edit" element={<CustomerForm />} />
         <Route path="/customers/:customerId/sites/new" element={<SiteForm />} />

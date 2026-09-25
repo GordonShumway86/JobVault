@@ -642,3 +642,89 @@ can't be, until the branch with these changes is actually deployed.
   matter what gets fixed here.
 - Once deployed: re-verify the autosave behavior for real, plus the
   nameplate OCR accuracy test that's already been waiting.
+
+---
+
+## 2026-09-25 (deploy) — Deployed everything to production, resolved
+
+Ed picked the "merge into production branch" option. Since this session's
+branch (`claude/notes-md-review-iboqzl`) was a clean, fast-forward-only
+descendant of `claude/service-log-hvac-app-ssx82g` (no conflicts
+possible — verified with `git merge-base --is-ancestor` first), pushed it
+straight across (`git push origin claude/notes-md-review-iboqzl:
+claude/service-log-hvac-app-ssx82g`). That push auto-triggered a real fresh
+Vercel build (confirmed via the Vercel MCP connector: new deployment,
+target `production`, state `READY`, built from the new commit) and
+`job-vault-six-mu.vercel.app` now aliases to it. Confirmed via
+`get_deployment` that the live alias serves the new commit. Everything
+from tonight — sync fixes, PinGate fail-closed, draft autosave, the
+Customer field changes, the customer search — is now actually live, not
+just committed.
+
+## 2026-09-25 (still later) — Nameplate scanner location explained; added a second OCR scanner for dispatch tickets
+
+### Why the nameplate scanner seemed missing
+Ed couldn't find anywhere to scan a photo. It does exist (`JobDetail.tsx`,
+"Scan Nameplate" section) but only shows Take Photo/Choose from Library
+buttons once the call has **equipment linked** — if not, it just shows one
+quiet gray hint sentence and nothing else, which reads as "not there."
+Explained where it lives and how to link equipment first. Left as-is for
+now (Ed didn't ask for a change here, just an explanation) — a follow-up
+idea logged below for making that hint screen actionable instead of a
+dead end.
+
+### New: scan a dispatch ticket/work order photo to create a Customer + Site
+
+Ed's actual office workflow: dispatch sends a photo/screenshot of a work
+order card (ticket #, "Customer Name | Store #", address, task
+description, work order #) and he currently retypes all of that by hand
+into New Customer + New Site. Wanted the same "photo → OCR → editable
+review → save" pattern already used for nameplates, applied to this.
+
+Built as a new, separate scanner (not reusing the nameplate one — the
+label shapes are completely different) —
+- **`src/lib/dispatchOcr.ts`**: regex extraction for customer name +
+  site/store number (from a `Name | Number` line), street address + city/
+  state/zip (paired by adjacent lines, matched on a `City, ST 12345`
+  pattern), a work order number (prefers a dash-suffixed reference like
+  `1894132-01`, falls back to a plain numeric ticket ID), the task/reason
+  line (`Tasks: ...`), and a best-effort contact name. Verified against
+  the exact sample ticket Ed shared (a Liquor Barn work order) — every
+  field extracted correctly, both as clean text and with OCR-noise-like
+  variations (case drift, extra spacing).
+- **`src/screens/DispatchScan.tsx`** (`/customers/scan`): same house
+  pattern as the nameplate scanner — Take Photo/Choose from Library →
+  Tesseract OCR (dynamic import, doesn't bloat the bundle) → editable
+  review screen with the same "AI extraction may be inaccurate, review
+  every field" warning → Create Customer (+ Site, if address info was
+  found). Customer name field styled as a heading, matching the New
+  Customer form's look.
+- **Two entry points**: a "Scan Ticket" link next to "+ New" on the
+  Customers list (creates the customer/site and drops onto that new
+  record), and a "Scan a ticket instead" link next to "+ New customer" on
+  the **New Call** screen (`?returnTo=job` — after creating the
+  customer/site it navigates straight into New Call with the customer,
+  site, work order #, and reason-for-call all pre-filled via router
+  state, so a dispatch photo can go straight to a ready-to-save call).
+
+**Testing**: this sandbox can't reach the Tesseract.js CDN (same
+already-documented limitation as the nameplate scanner), so true OCR
+couldn't be run end-to-end here — but verified everything around it for
+real: the extraction function itself (via the actual bundled module, not
+a copy) against the real sample ticket text; the screen renders and
+routes correctly; and uploading a real photo in a real browser exercises
+the OCR-failure path exactly as it would with no signal, degrading
+cleanly to the same manual-entry review screen rather than breaking.
+`tsc -b` and `vite build` both pass clean.
+
+### To pick this back up next
+- **First real test needed**: Ed to scan an actual dispatch ticket photo
+  on his phone (real internet, real Tesseract) and confirm both OCR
+  scanners' accuracy — nameplate and dispatch — tuning the regex patterns
+  in `nameplateOcr.ts`/`dispatchOcr.ts` against real output if needed.
+- Possible follow-up (not yet requested): make the nameplate scanner's
+  "link equipment first" hint on Job Detail tappable — jump straight into
+  adding/linking equipment instead of being a dead end.
+- This work is on `claude/notes-md-review-iboqzl` only — needs the same
+  "merge into production and deploy" step as above before Ed can test it
+  live (Ed already knows this deploy step now, from the previous entry).

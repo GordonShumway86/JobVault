@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { db } from '../lib/db';
 import { saveRecord, makeId, logActivity } from '../lib/repo';
 import { getOwnerId } from '../auth/AuthContext';
@@ -14,9 +14,20 @@ import {
   type CallType, type EquipmentCategory, type JobPriority,
 } from '../types';
 
+interface DispatchNavState {
+  customerId?: string;
+  siteId?: string;
+  workOrderNumber?: string;
+  reasonForCall?: string;
+}
+
 export default function JobForm() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  // Set when arriving here from "Scan Dispatch Ticket" — prefills who/where
+  // and the work order # / reason so nothing has to be retyped.
+  const navState = location.state as DispatchNavState | null;
   const editing = useLiveQuery(() => (id ? db.jobs.get(id) : undefined), [id]);
   const draftId = `job:${id ?? 'new'}`;
 
@@ -25,16 +36,16 @@ export default function JobForm() {
   const allSites = useLiveQuery(() => db.sites.toArray(), []) ?? [];
   const allEquipment = useLiveQuery(() => db.equipment.toArray(), []) ?? [];
 
-  const [customerId, setCustomerId] = useState(editing?.customer_id ?? '');
+  const [customerId, setCustomerId] = useState(editing?.customer_id ?? navState?.customerId ?? '');
   const [customerQuery, setCustomerQuery] = useState('');
   const [showCustomerSuggestions, setShowCustomerSuggestions] = useState(false);
-  const [siteId, setSiteId] = useState(editing?.site_id ?? '');
+  const [siteId, setSiteId] = useState(editing?.site_id ?? navState?.siteId ?? '');
   const [equipmentId, setEquipmentId] = useState(editing?.equipment_id ?? '');
   const [callType, setCallType] = useState<CallType>(editing?.call_type ?? 'service_diagnostic');
   const [priority, setPriority] = useState<JobPriority>(editing?.priority ?? 'normal');
   const [scheduledAt, setScheduledAt] = useState(editing?.scheduled_at?.slice(0, 16) ?? '');
-  const [workOrderNumber, setWorkOrderNumber] = useState(editing?.work_order_number ?? '');
-  const [reasonForCall, setReasonForCall] = useState(editing?.reason_for_call ?? '');
+  const [workOrderNumber, setWorkOrderNumber] = useState(editing?.work_order_number ?? navState?.workOrderNumber ?? '');
+  const [reasonForCall, setReasonForCall] = useState(editing?.reason_for_call ?? navState?.reasonForCall ?? '');
 
   // Inline "create new" mini-forms
   const [showNewCustomer, setShowNewCustomer] = useState(false);
@@ -241,13 +252,18 @@ export default function JobForm() {
             )}
           </div>
           {!customerId && (
-            <button
-              type="button"
-              onClick={() => { setShowNewCustomer((v) => !v); if (!showNewCustomer) setNewCustomerName((n) => n || customerQuery); }}
-              className="text-blue-400 text-sm font-medium"
-            >
-              {showNewCustomer ? '− Cancel new customer' : '+ New customer'}
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => { setShowNewCustomer((v) => !v); if (!showNewCustomer) setNewCustomerName((n) => n || customerQuery); }}
+                className="text-blue-400 text-sm font-medium"
+              >
+                {showNewCustomer ? '− Cancel new customer' : '+ New customer'}
+              </button>
+              <Link to="/customers/scan?returnTo=job" className="text-blue-400 text-sm font-medium">
+                Scan a ticket instead
+              </Link>
+            </div>
           )}
           {!customerId && showNewCustomer && (
             <div className="space-y-2.5 rounded-lg border border-zinc-800 p-3 bg-zinc-950/40">

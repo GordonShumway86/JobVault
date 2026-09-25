@@ -14,7 +14,10 @@ export default function CustomersList() {
   return (
     <div>
       <TopBar title="Customers" right={
-        <Link to="/customers/new" className="text-blue-400 text-sm font-semibold">+ New</Link>
+        <div className="flex items-center gap-3">
+          <Link to="/customers/scan" className="text-blue-400 text-sm font-semibold">Scan Ticket</Link>
+          <Link to="/customers/new" className="text-blue-400 text-sm font-semibold">+ New</Link>
+        </div>
       } />
       <div className="px-4 py-3 border-b border-zinc-800">
         <input
