@@ -561,3 +561,84 @@ mid-typing is still there.
 - Ed to verify the autosave behavior on his phone (switch apps mid-form,
   confirm it restores), alongside the still-pending nameplate OCR
   accuracy test.
+
+---
+
+## 2026-09-25 (latest) — Real bug found (deploy gap, not code), plus 5 requested changes
+
+Ed tested on his phone and reported the autosave "wasn't working" plus a
+batch of other requested changes.
+
+### The autosave bug — root cause was never a code bug, it was a deploy gap
+
+Reproduced the exact scenario in a real headless browser (Playwright):
+typed a customer name, blurred the field, then reloaded the page cold (the
+equivalent of the app being killed and reopened) — **the draft saved and
+restored correctly, every time.** So the mechanism itself works.
+
+Checked the Vercel project directly (`get_project` via the Vercel MCP
+connector) and found the real problem: the live URL Ed tests on
+(`job-vault-six-mu.vercel.app`) is still serving the `claude/service-log
+-hvac-app-ssx82g` branch's old build. **Every fix from this whole session
+— today's bug fixes, security fixes, the autosave feature, all of it —
+has only ever existed on this session's own branch
+(`claude/notes-md-review-iboqzl`) and has never been deployed.** Ed has
+been testing genuinely old code the entire time. Flagging this to Ed
+directly rather than deploying it myself, since pushing to a different
+branch / changing what's live needs his say-so first (see Quick Facts —
+default/production branch is currently `claude/service-log-hvac-app-ssx82g`).
+
+**Testing method note for future sessions**: this sandbox can reach
+neither Supabase nor the live Vercel deploy, but the local Vite dev
+server works fine for testing UI/logic changes that don't need a real
+network call — ran it locally with a temporary, gitignored `.env.local`
+containing only a throwaway test PIN hash (no Supabase vars at all, which
+makes the app run in its already-supported "local-only" mode) to get past
+the PIN gate and exercise real form behavior in a real Chromium browser,
+including inspecting IndexedDB directly. Deleted that temp `.env.local`
+before finishing — never committed, never real credentials.
+
+### Five requested changes, all made
+
+1. **Customer name styled like a heading** — the Customer Name field on
+   the New/Edit Customer form is now large, bold text instead of a normal
+   small input (`CustomerForm.tsx`).
+2. **Removed phone, email, and the "Business type" dropdown from Customer**
+   — Ed only does commercial work, so `customer_type` is now hardcoded to
+   `'commercial'` behind the scenes everywhere a customer gets created
+   (`CustomerForm.tsx` and JobForm's inline "+ New customer" mini-form) —
+   no dropdown shown anywhere anymore. Phone/email fields removed from
+   both forms entirely. The DB columns for `phone`/`email`/`customer_type`
+   still exist (harmless, unused) — didn't do a schema migration to drop
+   them, lower risk to just stop collecting/showing them in the UI.
+   `CustomerDetail.tsx` and `CustomersList.tsx` no longer display type,
+   phone, or email.
+3. **"Billing address" renamed to "Address"** — same field
+   (`billing_address` column unchanged), just relabeled; it was already
+   shown without the word "billing" on the customer detail screen, so no
+   change needed there.
+4. **Case-insensitive search** — already true everywhere there was an
+   actual search box (`CustomersList`, `Dashboard`, `JobsList` all already
+   lowercase both sides before comparing) — verified, no change needed
+   there. The actual gap was narrower: the Customer picker on the New Call
+   screen wasn't a search box at all, it was a plain dropdown list.
+5. **Live-narrowing customer search on the New Call screen** — replaced
+   that dropdown with a type-ahead text field: typing shows every customer
+   whose name contains what's typed (case-insensitive, partial match),
+   narrowing as you type more, down to the one exact match once the full
+   name is typed; tapping a suggestion selects it. Verified in a real
+   browser test: typing "DOLLAR" matched both "Dollar General" and
+   "dollar tree," typing the full "Dollar General" narrowed to just that
+   one.
+
+`tsc -b` and `vite build` both pass clean. Not yet tested on Ed's phone —
+can't be, until the branch with these changes is actually deployed.
+
+### To pick this back up next
+- **Needs Ed's decision**: how to get this branch's commits onto the live
+  Vercel URL — merge into `claude/service-log-hvac-app-ssx82g` and deploy,
+  point Vercel's production branch at this branch, or something else. Until
+  that happens, testing on the phone will keep showing old behavior no
+  matter what gets fixed here.
+- Once deployed: re-verify the autosave behavior for real, plus the
+  nameplate OCR accuracy test that's already been waiting.

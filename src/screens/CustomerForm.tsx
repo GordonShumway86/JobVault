@@ -6,8 +6,7 @@ import { saveRecord, makeId } from '../lib/repo';
 import { getOwnerId } from '../auth/AuthContext';
 import { saveDraft, loadDraft, clearDraft } from '../lib/formDraft';
 import TopBar from '../components/TopBar';
-import { Field, TextInput, TextArea, Select } from '../components/Field';
-import { CUSTOMER_TYPE_LABELS, type CustomerType } from '../types';
+import { Field, TextInput, TextArea } from '../components/Field';
 
 export default function CustomerForm() {
   const { id } = useParams();
@@ -17,18 +16,14 @@ export default function CustomerForm() {
   const draftAppliedRef = useRef(false);
 
   const [name, setName] = useState('');
-  const [type, setType] = useState<CustomerType>('residential');
   const [contact, setContact] = useState('');
-  const [phone, setPhone] = useState('');
-  const [email, setEmail] = useState('');
-  const [billingAddress, setBillingAddress] = useState('');
+  const [address, setAddress] = useState('');
   const [notes, setNotes] = useState('');
 
   useEffect(() => {
     if (!editing || draftAppliedRef.current) return;
-    setName(editing.name); setType(editing.customer_type); setContact(editing.primary_contact_name ?? '');
-    setPhone(editing.phone ?? ''); setEmail(editing.email ?? ''); setBillingAddress(editing.billing_address ?? '');
-    setNotes(editing.notes ?? '');
+    setName(editing.name); setContact(editing.primary_contact_name ?? '');
+    setAddress(editing.billing_address ?? ''); setNotes(editing.notes ?? '');
   }, [editing]);
 
   // Restore any in-progress work left behind if this form was closed
@@ -38,11 +33,8 @@ export default function CustomerForm() {
     loadDraft(draftId).then((d) => {
       if (cancelled || !d) return;
       if (typeof d.name === 'string') setName(d.name);
-      if (typeof d.type === 'string') setType(d.type as CustomerType);
       if (typeof d.contact === 'string') setContact(d.contact);
-      if (typeof d.phone === 'string') setPhone(d.phone);
-      if (typeof d.email === 'string') setEmail(d.email);
-      if (typeof d.billingAddress === 'string') setBillingAddress(d.billingAddress);
+      if (typeof d.address === 'string') setAddress(d.address);
       if (typeof d.notes === 'string') setNotes(d.notes);
       draftAppliedRef.current = true;
     });
@@ -53,7 +45,7 @@ export default function CustomerForm() {
   // field you tab/click away from is saved immediately — only the field
   // still being typed when the app gets interrupted can be lost.
   function persistDraft() {
-    saveDraft(draftId, { name, type, contact, phone, email, billingAddress, notes });
+    saveDraft(draftId, { name, contact, address, notes });
   }
 
   async function submit() {
@@ -62,9 +54,9 @@ export default function CustomerForm() {
     if (!ownerId) return;
     const now = new Date().toISOString();
     const rec = {
-      id: editing?.id ?? makeId(), owner_id: ownerId, name: name.trim(), customer_type: type,
-      primary_contact_name: contact || null, phone: phone || null, email: email || null,
-      billing_address: billingAddress || null, notes: notes || null, archived: editing?.archived ?? false,
+      id: editing?.id ?? makeId(), owner_id: ownerId, name: name.trim(), customer_type: 'commercial' as const,
+      primary_contact_name: contact || null, phone: null, email: null,
+      billing_address: address || null, notes: notes || null, archived: editing?.archived ?? false,
       created_at: editing?.created_at ?? now, updated_at: now,
     };
     await saveRecord('customers', rec);
@@ -76,18 +68,16 @@ export default function CustomerForm() {
     <div>
       <TopBar title={editing ? 'Edit Customer' : 'New Customer'} back />
       <div className="p-4 space-y-3" onBlur={persistDraft}>
-        <Field label="Business / customer name"><TextInput value={name} onChange={(e) => setName(e.target.value)} /></Field>
-        <Field label="Type">
-          <Select value={type} onChange={(e) => setType(e.target.value as CustomerType)}>
-            {Object.entries(CUSTOMER_TYPE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-          </Select>
+        <Field label="Customer Name">
+          <TextInput
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Company name"
+            className="text-xl font-bold py-4"
+          />
         </Field>
         <Field label="Primary contact"><TextInput value={contact} onChange={(e) => setContact(e.target.value)} /></Field>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Phone"><TextInput type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} /></Field>
-          <Field label="Email"><TextInput type="email" value={email} onChange={(e) => setEmail(e.target.value)} /></Field>
-        </div>
-        <Field label="Billing address"><TextArea rows={2} value={billingAddress} onChange={(e) => setBillingAddress(e.target.value)} /></Field>
+        <Field label="Address"><TextArea rows={2} value={address} onChange={(e) => setAddress(e.target.value)} /></Field>
         <Field label="Notes"><TextArea rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} /></Field>
         <button onClick={submit} disabled={!name.trim()} className="w-full rounded-xl bg-blue-600 disabled:opacity-40 text-white font-bold text-base py-4 mt-2">
           Save Customer

@@ -3,7 +3,6 @@ import { Link, useParams } from 'react-router-dom';
 import { db } from '../lib/db';
 import TopBar from '../components/TopBar';
 import StatusBadge from '../components/StatusBadge';
-import { CUSTOMER_TYPE_LABELS } from '../types';
 
 export default function CustomerDetail() {
   const { id } = useParams();
@@ -22,10 +21,7 @@ export default function CustomerDetail() {
       } />
       <div className="p-4 space-y-4">
         <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-4 space-y-1.5">
-          <div className="text-zinc-500 text-xs font-semibold">{CUSTOMER_TYPE_LABELS[customer.customer_type]}</div>
           {customer.primary_contact_name && <div className="text-white text-sm">{customer.primary_contact_name}</div>}
-          {customer.phone && <div className="text-zinc-300 text-sm">{customer.phone}</div>}
-          {customer.email && <div className="text-zinc-300 text-sm">{customer.email}</div>}
           {customer.billing_address && <div className="text-zinc-500 text-xs mt-1">{customer.billing_address}</div>}
           <div className="flex gap-3 text-xs text-zinc-500 pt-2">
             <span>{openJobs.length} open job{openJobs.length === 1 ? '' : 's'}</span>

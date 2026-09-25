@@ -3,7 +3,6 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { Link } from 'react-router-dom';
 import { db } from '../lib/db';
 import TopBar from '../components/TopBar';
-import { CUSTOMER_TYPE_LABELS } from '../types';
 
 export default function CustomersList() {
   const [q, setQ] = useState('');
@@ -32,7 +31,7 @@ export default function CustomersList() {
           return (
             <Link key={c.id} to={`/customers/${c.id}`} className="block rounded-xl border border-zinc-800 bg-zinc-900/60 p-4 active:bg-zinc-900">
               <div className="text-white font-semibold text-sm">{c.name}</div>
-              <div className="text-zinc-500 text-xs mt-0.5">{CUSTOMER_TYPE_LABELS[c.customer_type]} · {siteCount} site{siteCount === 1 ? '' : 's'}</div>
+              <div className="text-zinc-500 text-xs mt-0.5">{siteCount} site{siteCount === 1 ? '' : 's'}</div>
             </Link>
           );
         })}

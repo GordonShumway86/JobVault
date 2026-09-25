@@ -10,8 +10,8 @@ import TopBar from '../components/TopBar';
 import SectionCard from '../components/SectionCard';
 import { Field, TextInput, TextArea, Select } from '../components/Field';
 import {
-  CALL_TYPE_LABELS, CUSTOMER_TYPE_LABELS, EQUIPMENT_CATEGORY_LABELS,
-  type CallType, type CustomerType, type EquipmentCategory, type JobPriority,
+  CALL_TYPE_LABELS, EQUIPMENT_CATEGORY_LABELS,
+  type CallType, type EquipmentCategory, type JobPriority,
 } from '../types';
 
 export default function JobForm() {
@@ -26,6 +26,8 @@ export default function JobForm() {
   const allEquipment = useLiveQuery(() => db.equipment.toArray(), []) ?? [];
 
   const [customerId, setCustomerId] = useState(editing?.customer_id ?? '');
+  const [customerQuery, setCustomerQuery] = useState('');
+  const [showCustomerSuggestions, setShowCustomerSuggestions] = useState(false);
   const [siteId, setSiteId] = useState(editing?.site_id ?? '');
   const [equipmentId, setEquipmentId] = useState(editing?.equipment_id ?? '');
   const [callType, setCallType] = useState<CallType>(editing?.call_type ?? 'service_diagnostic');
@@ -37,8 +39,6 @@ export default function JobForm() {
   // Inline "create new" mini-forms
   const [showNewCustomer, setShowNewCustomer] = useState(false);
   const [newCustomerName, setNewCustomerName] = useState('');
-  const [newCustomerType, setNewCustomerType] = useState<CustomerType>('residential');
-  const [newCustomerPhone, setNewCustomerPhone] = useState('');
 
   const [showNewSite, setShowNewSite] = useState(false);
   const [newSiteName, setNewSiteName] = useState('');
@@ -52,6 +52,23 @@ export default function JobForm() {
 
   const [saving, setSaving] = useState(false);
 
+  // Keep the search box showing the selected customer's name whenever a
+  // customer is actually selected (from a click, a draft restore, or
+  // editing an existing job).
+  useEffect(() => {
+    if (!customerId) return;
+    const c = customers.find((c) => c.id === customerId);
+    if (c) setCustomerQuery(c.name);
+  }, [customerId, customers]);
+
+  // Live, case-insensitive, partial-match narrowing as the customer name is
+  // typed — settles down to the one exact match once the full name is typed.
+  const customerMatches = useMemo(() => {
+    const needle = customerQuery.trim().toLowerCase();
+    if (!needle) return [];
+    return customers.filter((c) => c.name.toLowerCase().includes(needle)).slice(0, 8);
+  }, [customers, customerQuery]);
+
   // Restore any in-progress work left behind if this form was closed
   // (app switched away, browser killed, etc.) before it was saved.
   useEffect(() => {
@@ -59,6 +76,7 @@ export default function JobForm() {
     loadDraft(draftId).then((d) => {
       if (cancelled || !d) return;
       if (typeof d.customerId === 'string') setCustomerId(d.customerId);
+      if (typeof d.customerQuery === 'string') setCustomerQuery(d.customerQuery);
       if (typeof d.siteId === 'string') setSiteId(d.siteId);
       if (typeof d.equipmentId === 'string') setEquipmentId(d.equipmentId);
       if (typeof d.callType === 'string') setCallType(d.callType as CallType);
@@ -68,8 +86,6 @@ export default function JobForm() {
       if (typeof d.reasonForCall === 'string') setReasonForCall(d.reasonForCall);
       if (typeof d.showNewCustomer === 'boolean') setShowNewCustomer(d.showNewCustomer);
       if (typeof d.newCustomerName === 'string') setNewCustomerName(d.newCustomerName);
-      if (typeof d.newCustomerType === 'string') setNewCustomerType(d.newCustomerType as CustomerType);
-      if (typeof d.newCustomerPhone === 'string') setNewCustomerPhone(d.newCustomerPhone);
       if (typeof d.showNewSite === 'boolean') setShowNewSite(d.showNewSite);
       if (typeof d.newSiteName === 'string') setNewSiteName(d.newSiteName);
       if (typeof d.newSiteAddress === 'string') setNewSiteAddress(d.newSiteAddress);
@@ -87,8 +103,8 @@ export default function JobForm() {
   // still being typed when the app gets interrupted can be lost.
   function persistDraft() {
     saveDraft(draftId, {
-      customerId, siteId, equipmentId, callType, priority, scheduledAt, workOrderNumber, reasonForCall,
-      showNewCustomer, newCustomerName, newCustomerType, newCustomerPhone,
+      customerId, customerQuery, siteId, equipmentId, callType, priority, scheduledAt, workOrderNumber, reasonForCall,
+      showNewCustomer, newCustomerName,
       showNewSite, newSiteName, newSiteAddress,
       showNewEquipment, newEqCategory, newEqManufacturer, newEqModel, newEqSerial,
     });
@@ -101,8 +117,8 @@ export default function JobForm() {
     if (customerId) return customerId;
     const ownerId = getOwnerId()!;
     const rec = {
-      id: makeId(), owner_id: ownerId, name: newCustomerName.trim(), customer_type: newCustomerType,
-      primary_contact_name: null, phone: newCustomerPhone || null, email: null, billing_address: null,
+      id: makeId(), owner_id: ownerId, name: newCustomerName.trim(), customer_type: 'commercial' as const,
+      primary_contact_name: null, phone: null, email: null, billing_address: null,
       notes: null, archived: false, created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
     };
     await saveRecord('customers', rec);
@@ -185,26 +201,57 @@ export default function JobForm() {
       <TopBar title={editing ? 'Edit Job' : 'New Call'} back />
       <div className="p-4 space-y-3" onBlur={persistDraft}>
         <SectionCard title="Customer & Site" subtitle="Who and where">
-          <Field label="Customer">
-            <Select value={customerId} onChange={(e) => { setCustomerId(e.target.value); setSiteId(''); setEquipmentId(''); setShowNewCustomer(false); }}>
-              <option value="">Select customer…</option>
-              {customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </Select>
-          </Field>
+          <div className="relative">
+            <Field label="Customer">
+              <TextInput
+                value={customerQuery}
+                onChange={(e) => {
+                  setCustomerQuery(e.target.value);
+                  setCustomerId('');
+                  setSiteId(''); setEquipmentId(''); setShowNewCustomer(false);
+                  setShowCustomerSuggestions(true);
+                }}
+                onFocus={() => setShowCustomerSuggestions(true)}
+                onBlur={() => setTimeout(() => setShowCustomerSuggestions(false), 150)}
+                placeholder="Start typing a customer name…"
+              />
+            </Field>
+            {showCustomerSuggestions && !customerId && customerQuery.trim() && (
+              <div className="absolute z-10 left-0 right-0 mt-1 rounded-lg border border-zinc-700 bg-zinc-900 divide-y divide-zinc-800 overflow-hidden shadow-xl">
+                {customerMatches.length === 0 ? (
+                  <div className="px-3.5 py-2.5 text-zinc-500 text-sm">No match — add as new customer below</div>
+                ) : (
+                  customerMatches.map((c) => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => {
+                        setCustomerId(c.id);
+                        setCustomerQuery(c.name);
+                        setShowCustomerSuggestions(false);
+                      }}
+                      className="w-full text-left px-3.5 py-2.5 text-white text-sm active:bg-zinc-800"
+                    >
+                      {c.name}
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
           {!customerId && (
-            <button type="button" onClick={() => setShowNewCustomer((v) => !v)} className="text-blue-400 text-sm font-medium">
+            <button
+              type="button"
+              onClick={() => { setShowNewCustomer((v) => !v); if (!showNewCustomer) setNewCustomerName((n) => n || customerQuery); }}
+              className="text-blue-400 text-sm font-medium"
+            >
               {showNewCustomer ? '− Cancel new customer' : '+ New customer'}
             </button>
           )}
           {!customerId && showNewCustomer && (
             <div className="space-y-2.5 rounded-lg border border-zinc-800 p-3 bg-zinc-950/40">
-              <Field label="Business / customer name"><TextInput value={newCustomerName} onChange={(e) => setNewCustomerName(e.target.value)} placeholder="Acme Property Group" /></Field>
-              <Field label="Type">
-                <Select value={newCustomerType} onChange={(e) => setNewCustomerType(e.target.value as CustomerType)}>
-                  {Object.entries(CUSTOMER_TYPE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-                </Select>
-              </Field>
-              <Field label="Phone"><TextInput value={newCustomerPhone} onChange={(e) => setNewCustomerPhone(e.target.value)} type="tel" /></Field>
+              <Field label="Customer name"><TextInput value={newCustomerName} onChange={(e) => setNewCustomerName(e.target.value)} placeholder="Acme Property Group" /></Field>
             </div>
           )}
 
