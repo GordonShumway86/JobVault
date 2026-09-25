@@ -925,3 +925,23 @@ than taking either AI's word for it:
 ### To pick this back up next
 - This fix, plus everything from the batch before it, is still only on
   `claude/notes-md-review-iboqzl` — not yet deployed.
+
+**Update**: deployed (fast-forward into `claude/service-log-hvac-app-ssx82g`,
+confirmed via the Vercel MCP connector that `job-vault-six-mu.vercel.app`
+rebuilt fresh and now aliases to it). Live as of this entry — this closes
+out everything from today's session (dispatch scanner, PO#/Dispatch#
+split, delete call/customer, the PhotoUploader fix).
+
+### Still open, whenever picked back up next
+- **First real on-device test still needed** for both OCR scanners
+  (nameplate + dispatch ticket) — everything verified in this sandbox has
+  been extraction-logic and UI-wiring checks, never real Tesseract output
+  on a real photo with real internet.
+- Known low-urgency gap, unchanged from earlier reviews: no cross-check
+  that a related record's owner matches the parent's owner (e.g. a part
+  on a job) — fine for the current single-owner reality, worth hardening
+  before any multi-user future.
+- Known limitation from the delete feature: deleting a customer/call
+  doesn't remove already-uploaded photo files from Supabase Storage, only
+  the database rows — a follow-up if Storage space ever becomes a real
+  concern.
