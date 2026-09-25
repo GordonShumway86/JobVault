@@ -42,7 +42,7 @@ export default function JobsList() {
       const s = siteMap.get(j.site_id);
       const e = j.equipment_id ? equipmentMap.get(j.equipment_id) : undefined;
       const haystack = [
-        j.job_number, j.work_order_number, c?.name, s?.name, s?.address, s?.city, s?.state,
+        j.job_number, j.work_order_number, j.dispatch_number, c?.name, s?.name, s?.address, s?.city, s?.state,
         e?.model_number, e?.serial_number, j.reason_for_call, j.technician_notes, j.diagnosis, j.work_performed,
       ].filter(Boolean).join(' ').toLowerCase();
       return haystack.includes(needle);

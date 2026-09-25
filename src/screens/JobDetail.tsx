@@ -117,7 +117,8 @@ export default function JobDetail() {
         <div className="flex items-center gap-3 mt-2 text-xs text-zinc-500">
           <span>{CALL_TYPE_LABELS[job.call_type]}</span>
           {job.scheduled_at && <span>· {format(parseISO(job.scheduled_at), 'MMM d, h:mm a')}</span>}
-          {job.work_order_number && <span>· WO# {job.work_order_number}</span>}
+          {job.work_order_number && <span>· PO# {job.work_order_number}</span>}
+          {job.dispatch_number && <span>· Dispatch# {job.dispatch_number}</span>}
         </div>
         {job.reason_for_call && (
           <div className="mt-2.5 text-sm text-zinc-300 bg-zinc-900/60 rounded-lg p-3 border border-zinc-800">

@@ -111,6 +111,7 @@ export interface Job {
   owner_id: string;
   job_number: string;
   work_order_number: string | null;
+  dispatch_number: string | null;
   customer_id: string;
   site_id: string;
   equipment_id: string | null;

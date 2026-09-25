@@ -728,3 +728,75 @@ cleanly to the same manual-entry review screen rather than breaking.
 - This work is on `claude/notes-md-review-iboqzl` only — needs the same
   "merge into production and deploy" step as above before Ed can test it
   live (Ed already knows this deploy step now, from the previous entry).
+
+**Update**: deployed the same way (fast-forward into
+`claude/service-log-hvac-app-ssx82g`, confirmed via the Vercel MCP
+connector that `job-vault-six-mu.vercel.app` rebuilt fresh and now
+aliases to it). Live as of this entry.
+
+---
+
+## 2026-09-25 (yet later) — PO#/Dispatch# split, second real ticket layout, site naming fix
+
+Ed sent a second real dispatch ticket (a different card layout than the
+first — this one has the PO#/Dispatch# explicitly labeled, "Issues:"
+instead of "Tasks:", and a "City, ST - County" address line with no zip)
+and asked for three changes based on testing the scanner against it.
+
+1. **Split "Work order #" into PO # and Dispatch #** — the ticket shows
+   both as genuinely separate numbers (`PO#: 1894132-01` and
+   `Dispatch#: 153264`), so one field was never going to hold both.
+   Added a real `jobs.dispatch_number` column
+   (`supabase/migrations/0005_dispatch_number.sql`, applied live via the
+   Supabase MCP connector, search index updated to include it) alongside
+   the existing `work_order_number`, now labeled "PO #" everywhere it's
+   shown to Ed (New Call form, Job Detail header badge — was "WO#", now
+   "PO#") rather than renaming the column itself. New Call now has both
+   "PO #" and "Dispatch #" fields side by side. Both added to the
+   Dashboard/JobsList search haystack too, same as the existing PO# was.
+2. **Dispatch scanner: PO #/Dispatch #/Reason for call only shown when
+   continuing to a call** — on the plain "Scan Ticket" entry (Customers
+   list, no call being created), those three fields are hidden entirely
+   now, since there's nowhere for them to be saved when only a
+   Customer/Site is being created. They only appear on the
+   `?returnTo=job` entry point (from New Call's "Scan a ticket instead"),
+   where they get carried forward into the pre-filled call. Verified both
+   modes in a real browser test with the actual second ticket photo.
+3. **Site name no longer just a bare store number** — when the ticket's
+   "Name | Number" line has only a number after the pipe (no distinct
+   site brand name), the created site is now named `"<Customer Name>
+   #<Number>"` (e.g. "Liquor Barn #948") instead of a generic "Store
+   #948" with no name in it at all. Ed's example: some accounts have a
+   different site brand than the customer name (Discount Tire the
+   customer, Mavis Tire the site) — when a ticket actually shows a
+   distinct site name after the pipe, that's still used as-is unchanged;
+   this fix only affects the bare-number case.
+
+### `dispatchOcr.ts` rewritten to handle both real ticket layouts seen so far
+- City/state/zip regex no longer requires a zip (this ticket's address
+  line has none: "Owensboro, KY - Daviess Cnty").
+- Street address is found by scanning up to 3 lines back from the city
+  line instead of only the immediately preceding line — this ticket has a
+  "TRAVEL TO" route/date badge line sitting between the street address
+  and the city line, which the old one-line-back logic would've missed.
+- Reason for call now matches both "Tasks:" and "Issues:" labels.
+- PO#/Dispatch# extraction now prefers an explicit label ("PO#:",
+  "Dispatch#:") when present, falling back to the old unlabeled heuristics
+  (dash-suffixed number / standalone numeric line) for tickets without
+  labels — covers both ticket styles Ed has sent so far.
+- Verified against both real tickets, plus a synthetic variant simulating
+  OCR splitting a two-column row (PO#/price, Dispatch#/Zone) onto separate
+  lines, since real Tesseract output order for side-by-side text isn't
+  fully predictable — all extracted correctly.
+
+`tsc -b` and `vite build` both pass clean.
+
+### To pick this back up next
+- **Not yet deployed** — this batch (PO#/Dispatch# split + the dispatch
+  scanner fixes) is committed on `claude/notes-md-review-iboqzl` only;
+  needs the same fast-forward-to-production step as the last two batches
+  before Ed can test it live.
+- Still waiting on Ed's first real on-device OCR test (real internet,
+  real Tesseract) for both scanners — everything verified so far has been
+  extraction-logic and UI-wiring checks in this sandbox, never real OCR
+  output.

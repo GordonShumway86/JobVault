@@ -18,6 +18,7 @@ interface DispatchNavState {
   customerId?: string;
   siteId?: string;
   workOrderNumber?: string;
+  dispatchNumber?: string;
   reasonForCall?: string;
 }
 
@@ -45,6 +46,7 @@ export default function JobForm() {
   const [priority, setPriority] = useState<JobPriority>(editing?.priority ?? 'normal');
   const [scheduledAt, setScheduledAt] = useState(editing?.scheduled_at?.slice(0, 16) ?? '');
   const [workOrderNumber, setWorkOrderNumber] = useState(editing?.work_order_number ?? navState?.workOrderNumber ?? '');
+  const [dispatchNumber, setDispatchNumber] = useState(editing?.dispatch_number ?? navState?.dispatchNumber ?? '');
   const [reasonForCall, setReasonForCall] = useState(editing?.reason_for_call ?? navState?.reasonForCall ?? '');
 
   // Inline "create new" mini-forms
@@ -94,6 +96,7 @@ export default function JobForm() {
       if (typeof d.priority === 'string') setPriority(d.priority as JobPriority);
       if (typeof d.scheduledAt === 'string') setScheduledAt(d.scheduledAt);
       if (typeof d.workOrderNumber === 'string') setWorkOrderNumber(d.workOrderNumber);
+      if (typeof d.dispatchNumber === 'string') setDispatchNumber(d.dispatchNumber);
       if (typeof d.reasonForCall === 'string') setReasonForCall(d.reasonForCall);
       if (typeof d.showNewCustomer === 'boolean') setShowNewCustomer(d.showNewCustomer);
       if (typeof d.newCustomerName === 'string') setNewCustomerName(d.newCustomerName);
@@ -114,7 +117,7 @@ export default function JobForm() {
   // still being typed when the app gets interrupted can be lost.
   function persistDraft() {
     saveDraft(draftId, {
-      customerId, customerQuery, siteId, equipmentId, callType, priority, scheduledAt, workOrderNumber, reasonForCall,
+      customerId, customerQuery, siteId, equipmentId, callType, priority, scheduledAt, workOrderNumber, dispatchNumber, reasonForCall,
       showNewCustomer, newCustomerName,
       showNewSite, newSiteName, newSiteAddress,
       showNewEquipment, newEqCategory, newEqManufacturer, newEqModel, newEqSerial,
@@ -178,7 +181,7 @@ export default function JobForm() {
         const updated = {
           ...editing, customer_id: custId, site_id: siteIdFinal, equipment_id: eqId,
           call_type: callType, priority, scheduled_at: scheduledAt ? new Date(scheduledAt).toISOString() : null,
-          work_order_number: workOrderNumber || null, reason_for_call: reasonForCall || null,
+          work_order_number: workOrderNumber || null, dispatch_number: dispatchNumber || null, reason_for_call: reasonForCall || null,
           updated_at: new Date().toISOString(),
         };
         await saveRecord('jobs', updated);
@@ -189,6 +192,7 @@ export default function JobForm() {
         const now = new Date().toISOString();
         const job = {
           id: makeId(), owner_id: ownerId, job_number: generateJobNumber(), work_order_number: workOrderNumber || null,
+          dispatch_number: dispatchNumber || null,
           customer_id: custId, site_id: siteIdFinal, equipment_id: eqId, call_type: callType, status: 'new' as const,
           priority, scheduled_at: scheduledAt ? new Date(scheduledAt).toISOString() : null, arrived_at: null, departed_at: null,
           reason_for_call: reasonForCall || null, technician_notes: null, diagnosis: null, work_performed: null,
@@ -349,9 +353,12 @@ export default function JobForm() {
             </Field>
             <Field label="Scheduled"><TextInput type="datetime-local" value={scheduledAt} onChange={(e) => setScheduledAt(e.target.value)} /></Field>
           </div>
-          <Field label="Work order #" hint="Customer/property manager's PO or work order reference">
-            <TextInput value={workOrderNumber} onChange={(e) => setWorkOrderNumber(e.target.value)} placeholder="e.g. WO-4471829" />
-          </Field>
+          <div className="grid grid-cols-2 gap-2.5">
+            <Field label="PO #" hint="Customer/property manager's PO reference">
+              <TextInput value={workOrderNumber} onChange={(e) => setWorkOrderNumber(e.target.value)} placeholder="e.g. 1894132-01" />
+            </Field>
+            <Field label="Dispatch #"><TextInput value={dispatchNumber} onChange={(e) => setDispatchNumber(e.target.value)} placeholder="e.g. 153264" /></Field>
+          </div>
         </SectionCard>
 
         <SectionCard title="Reason for Call">

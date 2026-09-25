@@ -28,7 +28,7 @@ export default function DispatchScan() {
   const [showRaw, setShowRaw] = useState(false);
   const [fields, setFields] = useState<DispatchExtraction>({
     customerName: null, siteName: null, address: null, city: null, state: null,
-    zip: null, workOrderNumber: null, reasonForCall: null, contactName: null,
+    zip: null, workOrderNumber: null, dispatchNumber: null, reasonForCall: null, contactName: null,
   });
 
   function reset() {
@@ -101,7 +101,8 @@ export default function DispatchScan() {
       navigate('/jobs/new', {
         state: {
           customerId: customer.id, siteId: siteId ?? undefined,
-          workOrderNumber: fields.workOrderNumber ?? undefined, reasonForCall: fields.reasonForCall ?? undefined,
+          workOrderNumber: fields.workOrderNumber ?? undefined, dispatchNumber: fields.dispatchNumber ?? undefined,
+          reasonForCall: fields.reasonForCall ?? undefined,
         },
       });
     } else {
@@ -151,7 +152,7 @@ export default function DispatchScan() {
               <TextInput value={fields.customerName ?? ''} onChange={(e) => update('customerName', e.target.value)} className="text-lg font-bold py-4" placeholder="Company name" />
             </Field>
             <Field label="Site name" hint="Leave blank to just call it &quot;Main Site&quot;">
-              <TextInput value={fields.siteName ?? ''} onChange={(e) => update('siteName', e.target.value)} placeholder="Store #948" />
+              <TextInput value={fields.siteName ?? ''} onChange={(e) => update('siteName', e.target.value)} placeholder="e.g. Liquor Barn #948" />
             </Field>
             <Field label="Address"><TextInput value={fields.address ?? ''} onChange={(e) => update('address', e.target.value)} /></Field>
             <div className="grid grid-cols-3 gap-3">
@@ -160,8 +161,16 @@ export default function DispatchScan() {
               <Field label="ZIP"><TextInput value={fields.zip ?? ''} onChange={(e) => update('zip', e.target.value)} /></Field>
             </div>
             <Field label="Site contact"><TextInput value={fields.contactName ?? ''} onChange={(e) => update('contactName', e.target.value)} /></Field>
-            <Field label="Work order #"><TextInput value={fields.workOrderNumber ?? ''} onChange={(e) => update('workOrderNumber', e.target.value)} /></Field>
-            <Field label="Reason for call"><TextArea rows={2} value={fields.reasonForCall ?? ''} onChange={(e) => update('reasonForCall', e.target.value)} /></Field>
+
+            {returnToJob && (
+              <>
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="PO #"><TextInput value={fields.workOrderNumber ?? ''} onChange={(e) => update('workOrderNumber', e.target.value)} /></Field>
+                  <Field label="Dispatch #"><TextInput value={fields.dispatchNumber ?? ''} onChange={(e) => update('dispatchNumber', e.target.value)} /></Field>
+                </div>
+                <Field label="Reason for call"><TextArea rows={2} value={fields.reasonForCall ?? ''} onChange={(e) => update('reasonForCall', e.target.value)} /></Field>
+              </>
+            )}
 
             {rawText && (
               <div>
