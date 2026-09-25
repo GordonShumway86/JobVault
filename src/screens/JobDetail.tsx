@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { db } from '../lib/db';
-import { saveRecord, makeId, logActivity } from '../lib/repo';
+import { saveRecord, makeId, logActivity, deleteJobCascade } from '../lib/repo';
 import { getOwnerId } from '../auth/AuthContext';
 import TopBar from '../components/TopBar';
 import SectionCard from '../components/SectionCard';
@@ -91,6 +91,16 @@ export default function JobDetail() {
     const fu = await db.follow_up_tasks.get(fuId);
     if (!fu) return;
     await saveRecord('follow_up_tasks', { ...fu, status: done ? 'done' : 'open', updated_at: new Date().toISOString() });
+  }
+
+  async function deleteThisCall() {
+    if (!job) return;
+    const ok = window.confirm(
+      `Delete call ${job.job_number}? This permanently removes it along with its photos, notes, parts, quotes, and readings. This cannot be undone.`,
+    );
+    if (!ok) return;
+    await deleteJobCascade(job.id);
+    navigate('/jobs');
   }
 
   return (
@@ -204,6 +214,13 @@ export default function JobDetail() {
             ))}
           </div>
         </SectionCard>
+
+        <button
+          onClick={deleteThisCall}
+          className="w-full rounded-xl border border-red-900/50 text-red-400 text-sm font-semibold py-3 mt-2"
+        >
+          Delete Call
+        </button>
       </div>
     </div>
   );

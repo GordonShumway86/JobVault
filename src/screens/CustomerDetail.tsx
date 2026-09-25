@@ -1,18 +1,38 @@
+import { useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { db } from '../lib/db';
+import { deleteCustomerCascade } from '../lib/repo';
 import TopBar from '../components/TopBar';
 import StatusBadge from '../components/StatusBadge';
 
 export default function CustomerDetail() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const customer = useLiveQuery(() => (id ? db.customers.get(id) : undefined), [id]);
   const sites = useLiveQuery(() => (id ? db.sites.where('customer_id').equals(id).toArray() : []), [id]) ?? [];
   const jobs = useLiveQuery(() => (id ? db.jobs.where('customer_id').equals(id).reverse().sortBy('updated_at') : []), [id]) ?? [];
+  const siteIds = useMemo(() => sites.map((s) => s.id), [sites]);
+  const equipmentCount = useLiveQuery(
+    () => (siteIds.length ? db.equipment.where('site_id').anyOf(siteIds).count() : 0),
+    [siteIds],
+  ) ?? 0;
 
   if (!customer) return <div><TopBar title="Customer" back /><div className="p-6 text-zinc-500 text-sm">Loading…</div></div>;
 
   const openJobs = jobs.filter((j) => !['closed', 'cancelled'].includes(j.status));
+
+  async function deleteThisCustomer() {
+    if (!customer) return;
+    const ok = window.confirm(
+      `Delete ${customer.name} completely? This permanently removes ${sites.length} site${sites.length === 1 ? '' : 's'}, `
+      + `${equipmentCount} piece${equipmentCount === 1 ? '' : 's'} of equipment, and ${jobs.length} call${jobs.length === 1 ? '' : 's'} `
+      + `(with all their photos, notes, parts, and quotes). This cannot be undone.`,
+    );
+    if (!ok) return;
+    await deleteCustomerCascade(customer.id);
+    navigate('/customers');
+  }
 
   return (
     <div>
@@ -62,6 +82,13 @@ export default function CustomerDetail() {
             ))}
           </div>
         </div>
+
+        <button
+          onClick={deleteThisCustomer}
+          className="w-full rounded-xl border border-red-900/50 text-red-400 text-sm font-semibold py-3 mt-2"
+        >
+          Delete Customer
+        </button>
       </div>
     </div>
   );

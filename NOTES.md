@@ -800,3 +800,81 @@ and asked for three changes based on testing the scanner against it.
   real Tesseract) for both scanners — everything verified so far has been
   extraction-logic and UI-wiring checks in this sandbox, never real OCR
   output.
+
+---
+
+## 2026-09-25 (yet again later) — Delete a call, delete a customer (cascading)
+
+Ed wanted three things, which turned out to be two features: a way to
+delete a single call made by mistake or since cancelled, and a way to
+delete a customer — either an accidental entry, or a real former customer
+with everything under it (his example: Liquor Barn with 20-30 sites and a
+long job history, if they stop being a customer).
+
+### Why this needed real thought, not just a delete button
+Checked `supabase/migrations/0001_init.sql` first: `jobs.customer_id` and
+`jobs.site_id` are `on delete restrict` — Postgres will outright refuse to
+delete a customer or site while any job still references it. Sites and
+equipment, on the other hand, *do* cascade (`on delete cascade` from
+customers/sites), as do everything hanging off a job (activity, photos,
+parts, quotes + line items, vendor docs, readings, follow-ups — all
+`on delete cascade` from jobs). So the only safe order is: delete every
+job under the customer first (each one for real, enqueued to Supabase),
+*then* delete the customer, which then cascades sites + equipment
+automatically server-side.
+
+IndexedDB has no real foreign keys, so none of that cascading happens
+locally — local copies of everything need deleting directly, or they'd
+sit around forever (defeating the actual point Ed raised: freeing up
+space for a customer that's gone). Also handled a subtler edge: a
+still-queued, not-yet-synced mutation for a child record that's about to
+be deleted (e.g. a photo mid-upload) would otherwise keep retrying
+forever against a parent that no longer exists once the cascade lands —
+those get purged from the local sync queue too.
+
+### What was built (`src/lib/repo.ts`)
+- `deleteJobCascade(jobId)` — deletes a job and everything under it
+  (activity, photos + their local blob cache, parts, quotes + line items,
+  vendor docs, readings, follow-ups), all locally; only the job itself
+  gets a real remote delete enqueued (the rest cascade server-side once
+  it lands).
+- `deleteCustomerCascade(customerId)` — runs `deleteJobCascade` for every
+  job under the customer, then deletes every site + its equipment
+  locally, then enqueues one real remote delete for the customer itself
+  (which cascades the sites/equipment removal server-side). Only the jobs
+  and the customer get individual remote deletes — not 20-30 redundant
+  ones for a big account's sites/equipment.
+
+### UI
+- **Job Detail**: a red "Delete Call" button at the bottom, `confirm()`
+  naming the job number and what it'll take with it, then back to the
+  Jobs list.
+- **Customer Detail**: a red "Delete Customer" button, `confirm()` stating
+  the *actual* counts (sites/equipment/calls) about to be deleted, so it's
+  not a blind confirmation, then back to the Customers list.
+- Deliberately just one delete action per screen, not a separate "did I
+  make a mistake" vs. "this customer is gone for good" flow — those are
+  the same action at different times, per Ed's own framing.
+
+**Known limitation, not solved here**: photo/attachment files already
+uploaded to Supabase Storage aren't deleted by this — only the database
+rows are. Deleting a customer with real photo history will leave those
+files behind in Storage (still counts toward the destructive DB cleanup
+Ed wanted, just doesn't reclaim Storage space). Worth a follow-up if that
+becomes a real cost/space concern.
+
+**Testing**: this is destructive and irreversible, so verified it for
+real rather than just reading the code — seeded a full customer tree
+(2 sites, 2 pieces of equipment, 2 jobs, and one of every child record
+type including a deliberately-stale queued mutation) directly into
+IndexedDB in a real browser, ran `deleteCustomerCascade` through the
+actual bundled module, and confirmed: every table ended at 0 rows, the
+sync queue held exactly 3 entries (job, job, customer — delete ops, in
+that exact order) and nothing else, and the stale queued mutation for a
+deleted part was gone. Also confirmed both confirm() dialogs show the
+right counts/wording and that Cancel leaves everything untouched.
+`tsc -b` and `vite build` both pass clean.
+
+### To pick this back up next
+- **Not yet deployed** — same as the last two batches, sitting on
+  `claude/notes-md-review-iboqzl` only.
