@@ -25,13 +25,34 @@ export function loadImage(file: File): Promise<HTMLImageElement> {
   });
 }
 
-export function preprocessImage(img: HTMLImageElement, contrastPct = 150): HTMLCanvasElement {
+// A crop region as fractions (0..1) of the source image's natural width/
+// height — resolution-independent, so the same rect works whether it came
+// from a small preview or the original full-resolution photo.
+export interface CropRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+// Tesseract's own docs (and every comparable nameplate-OCR tool) treat
+// cropping to just the text region as the standard fix for a small label
+// photographed against a large, busy background — more reliable than a
+// page-segmentation-mode setting alone, since a big surrounding area can
+// still get misread as text-like noise. `crop` is optional so callers that
+// don't need it (the dispatch ticket scanner, which photographs a card
+// that's mostly text already) are unaffected.
+export function preprocessImage(img: HTMLImageElement, contrastPct = 150, crop?: CropRect): HTMLCanvasElement {
+  const sx = crop ? crop.x * img.naturalWidth : 0;
+  const sy = crop ? crop.y * img.naturalHeight : 0;
+  const sw = crop ? crop.width * img.naturalWidth : img.naturalWidth;
+  const sh = crop ? crop.height * img.naturalHeight : img.naturalHeight;
   const canvas = document.createElement('canvas');
-  canvas.width = img.naturalWidth;
-  canvas.height = img.naturalHeight;
+  canvas.width = sw;
+  canvas.height = sh;
   const ctx = canvas.getContext('2d')!;
   ctx.filter = `contrast(${contrastPct}%) grayscale(100%) brightness(1.05)`;
-  ctx.drawImage(img, 0, 0);
+  ctx.drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
   return canvas;
 }
 
