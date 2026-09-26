@@ -3,6 +3,7 @@ import { db } from '../lib/db';
 import { saveRecord, makeId, logActivity } from '../lib/repo';
 import { getOwnerId } from '../auth/AuthContext';
 import { extractNameplateFields, type NameplateExtraction } from '../lib/nameplateOcr';
+import { isStaleChunkError } from '../lib/staleChunk';
 import type { Equipment } from '../types';
 import { Field, TextInput } from './Field';
 
@@ -83,6 +84,11 @@ export default function NameplateScanner({
       });
       setStage('review');
     } catch (err) {
+      if (isStaleChunkError(err)) {
+        setStatusText('Update found — reloading…');
+        window.location.reload();
+        return;
+      }
       setError(err instanceof Error ? err.message : 'Could not read the photo. You can still fill in the fields by hand.');
       setStage('review');
     }

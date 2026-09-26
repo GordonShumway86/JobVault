@@ -974,3 +974,40 @@ scanner is reached via "New Call → Scan a ticket instead," by design (see
 - Still waiting on a real on-device test of the nameplate scanner, and a
   test of the dispatch scanner's `?returnTo=job` path (New Call → Scan a
   ticket instead), which hasn't been exercised with real OCR yet.
+
+---
+
+## 2026-09-26 (later) — "Importing a module script failed" after deploy
+
+Right after the site-name fix above went live, Ed hit a scanner error:
+"Importing a module script failed." Root cause: he had the app open in his
+browser/PWA from *before* that deploy finished. Both scanners load
+Tesseract via a dynamic `import('tesseract.js')` so it doesn't bloat the
+main bundle — but that means the already-loaded page (running the old
+build's JS) was still pointing at the old build's hashed chunk filename
+for that import. Vercel's new deployment doesn't keep the old build's
+static files around, so that filename 404'd the moment he tried to scan
+after the swap. Not an OCR bug, not a code bug in the extraction logic —
+a normal side effect of code-splitting + replacing the whole production
+build, that was always going to happen on some deploy sooner or later to
+whoever already had a tab open.
+
+Fixed generally, not just patched for this one instance: new
+`src/lib/staleChunk.ts` recognizes that specific error message
+class (`isStaleChunkError`), and both `NameplateScanner.tsx` and
+`DispatchScan.tsx` now check for it in their OCR catch block — instead of
+showing the scary raw error, it shows "Update found — reloading…" and
+does a real `window.location.reload()`, which pulls the current build
+fresh and fixes it in one tap. This will keep happening on some
+percentage of future deploys (anyone with the tab open across a
+production swap) — the fix isn't "stop it happening," it's "recover from
+it automatically instead of showing a dead-end error."
+
+`tsc -b` and `vite build` pass clean.
+
+### To pick this back up next
+- Not yet deployed — sitting on `claude/review-notes-app-build-bkvmc1`
+  only, needs the same push-to-production step as usual.
+- Ed should also just close/reopen the app once after any deploy, same as
+  before — this fix just means a scan-in-progress recovers on its own
+  instead of dead-ending, not that reopening is no longer ever needed.

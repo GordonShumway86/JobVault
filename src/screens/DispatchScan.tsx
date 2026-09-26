@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { saveRecord, makeId } from '../lib/repo';
 import { getOwnerId } from '../auth/AuthContext';
 import { extractDispatchFields, type DispatchExtraction } from '../lib/dispatchOcr';
+import { isStaleChunkError } from '../lib/staleChunk';
 import TopBar from '../components/TopBar';
 import { Field, TextInput, TextArea } from '../components/Field';
 
@@ -60,6 +61,11 @@ export default function DispatchScan() {
       setFields(extractDispatchFields(text));
       setStage('review');
     } catch (err) {
+      if (isStaleChunkError(err)) {
+        setStatusText('Update found — reloading…');
+        window.location.reload();
+        return;
+      }
       setError(err instanceof Error ? err.message : 'Could not read the photo. You can still fill in the fields by hand.');
       setStage('review');
     }
