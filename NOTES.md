@@ -1666,3 +1666,77 @@ Playwright (temporarily installed, not saved to package.json/committed):
   be multiple OCR passes (different rotations/contrast) merged together —
   a bigger change, intentionally not built yet since Ed wanted the
   cropping fix tried first.
+
+---
+
+## 2026-09-26 (last one) — Crop worked, real progress, but model # still wrong (a different bug)
+
+Ed's first real test with the new crop step: cropped tight to just the
+plate, and it worked partway — **Serial # came back correct for the first
+time ever** (`T16J11397`). But Model # came back as `200-230`, which is
+the *voltage* reading from a completely different part of the label, not
+a model number.
+
+Sent the real raw OCR text again rather than guessing a third time (same
+pattern as the last two rounds — it's the only thing that's actually
+worked). It showed exactly what went wrong: on this crop, OCR read "PART
+NO. / MODEL NO. / SERIAL NO." (the three stacked labels, same shape as
+before) but then only found **one** real value afterward (`T16J11397`)
+before running straight into the VOLTS/PHASE/HERTZ table — the actual
+part number and model number text wasn't read at all this time (missing
+from the OCR output entirely, not just garbled). `findModelSerialFromLabelBlock`
+(added earlier today) had no way to know a value was missing — it just
+grabbed the next digit-containing token after the labels regardless of
+which real field it belonged to, so it walked straight into the voltage
+table's `200-230` and confidently called it the model number.
+
+**Fix** (`src/lib/nameplateOcr.ts`):
+- `findModelSerialFromLabelBlock` now stops its search window at the next
+  section's own header words (VOLTS, PHASE, HERTZ, MIN, MAX, COMPRESSOR,
+  DESIGN, REFRIGERANT, EVAP, CRANKCASE, FOR, WEIGHT) — the value run for
+  PART/MODEL/SERIAL never spills into one of these, so hitting one means
+  "there's nothing more to find here," not "keep looking."
+- It also now requires finding as many value tokens as labels detected
+  (3 if PART NO. is present, 2 if not) before trusting any of them. Found
+  fewer than that → returns null for both rather than guessing a
+  position, which is exactly what happened here: only 1 value token
+  existed before hitting "VOLTS," so it now correctly leaves Model #
+  blank instead of grabbing the voltage table's value.
+
+**Verified against all the real data collected so far, not just this one
+case** — re-ran the actual bundled module (esbuild) against: this newest
+raw text (confirms `model_number: null`, `serial_number: "T16J11397"`,
+i.e. no wrong guess, real value kept), the previous real raw text from
+earlier today (confirms model `CZT050MECF` / serial `T16J11397` still
+extract correctly — this fix didn't regress the case it was already
+handling), and the clean/simple hand-built test cases (still pass). All
+four cases pass in one run. `tsc -b` and `vite build` both pass clean.
+
+**Being explicit about what "verified" does and doesn't mean here**, since
+that gap has bitten this feature every round so far: this confirms the
+*parsing logic* is now correct against three different real (or
+realistic) raw-text shapes. It says nothing about whether Tesseract will
+read the actual part/model number text on a re-scan of this same plate —
+that's a real OCR-quality question (lighting, angle, crop tightness) this
+sandbox cannot test, same limitation as every OCR feature in this app.
+
+### Also clarified for future sessions
+Ed asked directly why fixes "don't work" and whether they're tested
+first. Answer given plainly: every fix in this whole nameplate-OCR effort
+has been tested at the *logic* level (does the parsing code do the right
+thing with real OCR text) and, for the crop step, at the *UI* level (does
+dragging actually work) — but the actual OCR recognition step itself
+(Tesseract reading a real photo) has never once been testable from this
+sandbox, because it has no network path to the CDN Tesseract needs. That
+should be stated plainly on every fix going forward, not just implied by
+"tsc/build pass clean."
+
+### To pick this back up next
+- Not yet deployed — needs the same PR-and-merge step as the last several.
+- Ed to re-scan the same nameplate (same crop, tight to the plate) and
+  check: does Model # come back correctly blank now (not a wrong guess),
+  and can Ed read the part/model text himself off the raw scanned text
+  toggle to judge whether it's an OCR-quality miss (bad crop/lighting/
+  angle) versus something still wrong in the code. If the real model
+  number text shows up cleanly in the raw text now and still doesn't land
+  in the right field, that's a new, real bug — send the raw text again.

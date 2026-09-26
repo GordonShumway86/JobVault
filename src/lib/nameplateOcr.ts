@@ -71,6 +71,12 @@ function findRefrigerant(text: string): string | null {
   return m ? m[1] : null;
 }
 
+// Words that start a different section of the plate — the value run for
+// PART/MODEL/SERIAL never spills into one of these, so a match cuts off
+// the search window before it can wander into an unrelated table (see
+// findModelSerialFromLabelBlock below).
+const NEXT_SECTION_WORDS = /\b(VOLTS|PHASE|HERTZ|MIN|MAX|COMPRESSOR|DESIGN|REFRIGERANT|EVAP|CRANKCASE|FOR|WEIGHT)\b/;
+
 // Some nameplates print "PART NO. MODEL NO. SERIAL NO." (or just "MODEL NO.
 // SERIAL NO.") as a run of labels with no value between them, then the
 // actual values as their own run right after (e.g. "...SERIAL NO 89026301
@@ -83,13 +89,23 @@ function findRefrigerant(text: string): string | null {
 // skip PART NO.'s value (if present), then take the next two real-looking
 // tokens (must contain a digit — plain-letter OCR noise between numbers
 // doesn't) as model, then serial, in that fixed order.
+//
+// Requires finding as many value tokens as labels detected before trusting
+// any of them — a real scan of this same plate once had OCR completely
+// miss the part/model value row and read straight through to the voltage
+// table with nothing in between; without this check that produced a
+// confidently wrong model number (a voltage reading, "200-230") instead of
+// recognizing the value just wasn't there to read.
 function findModelSerialFromLabelBlock(text: string): { model: string | null; serial: string | null } {
   const m = /(PART\s*NO\.?\s+)?MODEL\s*NO\.?\s+SERIAL\s*NO\.?/.exec(text);
   if (!m) return { model: null, serial: null };
-  const after = text.slice(m.index + m[0].length, m.index + m[0].length + 100);
+  let after = text.slice(m.index + m[0].length, m.index + m[0].length + 150);
+  const nextSection = NEXT_SECTION_WORDS.exec(after);
+  if (nextSection) after = after.slice(0, nextSection.index);
   const values = (after.match(/[A-Z0-9][A-Z0-9/-]{2,29}/g) ?? []).filter((t) => /\d/.test(t));
   const skip = m[1] ? 1 : 0;
-  return { model: values[skip] ?? null, serial: values[skip + 1] ?? null };
+  if (values.length < skip + 2) return { model: null, serial: null };
+  return { model: values[skip], serial: values[skip + 1] };
 }
 
 // Fallback for nameplates that print "VOLTS PHASE HERTZ" as a table header
