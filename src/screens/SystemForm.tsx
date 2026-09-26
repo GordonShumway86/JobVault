@@ -199,14 +199,9 @@ export default function SystemForm() {
                   <span className="text-zinc-500 text-xs font-semibold">Component {i + 1}</span>
                   <button type="button" onClick={() => removeComponent(c)} className="text-red-400 text-xs font-semibold">Remove</button>
                 </div>
-                <ComponentTypeFields
-                  category={category}
-                  value={{ position: c.position, componentType: c.componentType }}
-                  onChange={(next) => updateComponent(c.key, { position: next.position, componentType: next.componentType })}
-                />
-                <Field label="Designation / Name" hint='e.g. "Condenser 1"'>
-                  <TextInput value={c.name} onChange={(e) => updateComponent(c.key, { name: e.target.value })} />
-                </Field>
+                {/* Scan first: the fields below are always there to fill in
+                    or correct by hand, so there's no separate "manual entry"
+                    choice — scanning just pre-fills whatever it can read. */}
                 <NameplateScanButton
                   onExtracted={(extracted) => updateComponent(c.key, {
                     manufacturer: extracted.manufacturer ?? c.manufacturer,
@@ -219,6 +214,14 @@ export default function SystemForm() {
                     mocp: extracted.mocp ?? c.mocp,
                   })}
                 />
+                <ComponentTypeFields
+                  category={category}
+                  value={{ position: c.position, componentType: c.componentType }}
+                  onChange={(next) => updateComponent(c.key, { position: next.position, componentType: next.componentType })}
+                />
+                <Field label="Designation / Name" hint='e.g. "Condenser 1"'>
+                  <TextInput value={c.name} onChange={(e) => updateComponent(c.key, { name: e.target.value })} />
+                </Field>
                 <div className="grid grid-cols-2 gap-2.5">
                   <Field label="Brand / Manufacturer"><TextInput value={c.manufacturer} onChange={(e) => updateComponent(c.key, { manufacturer: e.target.value })} /></Field>
                   <Field label="Model #"><TextInput value={c.model} onChange={(e) => updateComponent(c.key, { model: e.target.value })} /></Field>
