@@ -5,6 +5,8 @@ import TopBar from '../components/TopBar';
 import StatusBadge from '../components/StatusBadge';
 import { EQUIPMENT_CATEGORY_LABELS } from '../types';
 
+const UNIT_POSITION_LABELS = { outdoor: 'Outdoor Unit', indoor: 'Indoor Unit' };
+
 export default function SiteDetail() {
   const { id } = useParams();
   const site = useLiveQuery(() => (id ? db.sites.get(id) : undefined), [id]);
@@ -44,7 +46,12 @@ export default function SiteDetail() {
             {equipment.map((e) => (
               <Link key={e.id} to={`/equipment/${e.id}`} className="block rounded-xl border border-zinc-800 bg-zinc-900/60 p-4">
                 <div className="text-white font-semibold text-sm">{e.nickname || `${e.manufacturer ?? ''} ${e.model_number ?? ''}`.trim() || EQUIPMENT_CATEGORY_LABELS[e.category]}</div>
-                <div className="text-zinc-500 text-xs mt-0.5">{EQUIPMENT_CATEGORY_LABELS[e.category]} · {e.location_at_site}</div>
+                <div className="text-zinc-500 text-xs mt-0.5">
+                  {EQUIPMENT_CATEGORY_LABELS[e.category]}
+                  {e.unit_position && ` · ${UNIT_POSITION_LABELS[e.unit_position]}`}
+                  {e.subtype && ` · ${e.subtype}`}
+                  {e.location_at_site && ` · ${e.location_at_site}`}
+                </div>
               </Link>
             ))}
           </div>

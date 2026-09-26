@@ -4,6 +4,7 @@ import { saveRecord, makeId, logActivity } from '../lib/repo';
 import { getOwnerId } from '../auth/AuthContext';
 import { extractNameplateFields, type NameplateExtraction } from '../lib/nameplateOcr';
 import { isStaleChunkError } from '../lib/staleChunk';
+import { loadImage, preprocessImage, runOcr } from '../lib/ocr';
 import type { Equipment } from '../types';
 import { Field, TextInput } from './Field';
 
@@ -59,17 +60,9 @@ export default function NameplateScanner({
     setStatusText('Loading OCR engine…');
     try {
       const img = await loadImage(picked);
-      const canvas = preprocessImage(img);
+      const canvas = preprocessImage(img, 180);
       setStatusText('Reading nameplate…');
-      // Loaded on demand so it never bloats the main app bundle.
-      const { createWorker } = await import('tesseract.js');
-      const worker = await createWorker('eng');
-      let text: string;
-      try {
-        ({ data: { text } } = await worker.recognize(canvas));
-      } finally {
-        await worker.terminate();
-      }
+      const text = await runOcr(canvas);
       setRawText(text);
       const extracted = extractNameplateFields(text);
       setFields({
@@ -195,25 +188,4 @@ export default function NameplateScanner({
       )}
     </div>
   );
-}
-
-function loadImage(file: File): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => resolve(img);
-    img.onerror = reject;
-    img.src = URL.createObjectURL(file);
-  });
-}
-
-function preprocessImage(img: HTMLImageElement): HTMLCanvasElement {
-  const canvas = document.createElement('canvas');
-  canvas.width = img.naturalWidth;
-  canvas.height = img.naturalHeight;
-  const ctx = canvas.getContext('2d')!;
-  // High contrast + grayscale reads stamped/etched nameplate text far more
-  // reliably than the original photo.
-  ctx.filter = 'contrast(180%) grayscale(100%) brightness(1.05)';
-  ctx.drawImage(img, 0, 0);
-  return canvas;
 }

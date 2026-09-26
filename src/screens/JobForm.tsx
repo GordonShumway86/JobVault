@@ -9,9 +9,10 @@ import { saveDraft, loadDraft, clearDraft } from '../lib/formDraft';
 import TopBar from '../components/TopBar';
 import SectionCard from '../components/SectionCard';
 import { Field, TextInput, TextArea, Select } from '../components/Field';
+import { EquipmentTypeFields } from '../components/EquipmentTypeFields';
 import {
   CALL_TYPE_LABELS, EQUIPMENT_CATEGORY_LABELS,
-  type CallType, type EquipmentCategory, type JobPriority,
+  type CallType, type EquipmentCategory, type JobPriority, type UnitPosition,
 } from '../types';
 
 interface DispatchNavState {
@@ -59,6 +60,8 @@ export default function JobForm() {
 
   const [showNewEquipment, setShowNewEquipment] = useState(false);
   const [newEqCategory, setNewEqCategory] = useState<EquipmentCategory>('split_system');
+  const [newEqUnitPosition, setNewEqUnitPosition] = useState<UnitPosition | null>(null);
+  const [newEqSubtype, setNewEqSubtype] = useState<string | null>(null);
   const [newEqManufacturer, setNewEqManufacturer] = useState('');
   const [newEqModel, setNewEqModel] = useState('');
   const [newEqSerial, setNewEqSerial] = useState('');
@@ -105,6 +108,8 @@ export default function JobForm() {
       if (typeof d.newSiteAddress === 'string') setNewSiteAddress(d.newSiteAddress);
       if (typeof d.showNewEquipment === 'boolean') setShowNewEquipment(d.showNewEquipment);
       if (typeof d.newEqCategory === 'string') setNewEqCategory(d.newEqCategory as EquipmentCategory);
+      if (typeof d.newEqUnitPosition === 'string') setNewEqUnitPosition(d.newEqUnitPosition as UnitPosition);
+      if (typeof d.newEqSubtype === 'string') setNewEqSubtype(d.newEqSubtype);
       if (typeof d.newEqManufacturer === 'string') setNewEqManufacturer(d.newEqManufacturer);
       if (typeof d.newEqModel === 'string') setNewEqModel(d.newEqModel);
       if (typeof d.newEqSerial === 'string') setNewEqSerial(d.newEqSerial);
@@ -120,7 +125,7 @@ export default function JobForm() {
       customerId, customerQuery, siteId, equipmentId, callType, priority, scheduledAt, workOrderNumber, dispatchNumber, reasonForCall,
       showNewCustomer, newCustomerName,
       showNewSite, newSiteName, newSiteAddress,
-      showNewEquipment, newEqCategory, newEqManufacturer, newEqModel, newEqSerial,
+      showNewEquipment, newEqCategory, newEqUnitPosition, newEqSubtype, newEqManufacturer, newEqModel, newEqSerial,
     });
   }
 
@@ -157,7 +162,8 @@ export default function JobForm() {
     if (!showNewEquipment || !newEqModel.trim()) return null;
     const ownerId = getOwnerId()!;
     const rec = {
-      id: makeId(), owner_id: ownerId, site_id: siteIdVal, category: newEqCategory, nickname: null,
+      id: makeId(), owner_id: ownerId, site_id: siteIdVal, category: newEqCategory,
+      unit_position: newEqUnitPosition, subtype: newEqSubtype?.trim() || null, nickname: null,
       location_at_site: null, manufacturer: newEqManufacturer || null, model_number: newEqModel || null,
       serial_number: newEqSerial || null, manufacture_date: null, refrigerant_type: null, nominal_capacity: null,
       voltage: null, phase: null, mca: null, mocp: null, compressor_model: null, filter_sizes: null,
@@ -324,10 +330,18 @@ export default function JobForm() {
             {!equipmentId && showNewEquipment && (
               <div className="space-y-2.5 rounded-lg border border-zinc-800 p-3 bg-zinc-950/40">
                 <Field label="Category">
-                  <Select value={newEqCategory} onChange={(e) => setNewEqCategory(e.target.value as EquipmentCategory)}>
+                  <Select
+                    value={newEqCategory}
+                    onChange={(e) => { setNewEqCategory(e.target.value as EquipmentCategory); setNewEqUnitPosition(null); setNewEqSubtype(null); }}
+                  >
                     {Object.entries(EQUIPMENT_CATEGORY_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                   </Select>
                 </Field>
+                <EquipmentTypeFields
+                  category={newEqCategory}
+                  value={{ unit_position: newEqUnitPosition, subtype: newEqSubtype }}
+                  onChange={(next) => { setNewEqUnitPosition(next.unit_position); setNewEqSubtype(next.subtype); }}
+                />
                 <div className="grid grid-cols-2 gap-2.5">
                   <Field label="Manufacturer"><TextInput value={newEqManufacturer} onChange={(e) => setNewEqManufacturer(e.target.value)} /></Field>
                   <Field label="Model #"><TextInput value={newEqModel} onChange={(e) => setNewEqModel(e.target.value)} /></Field>

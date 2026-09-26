@@ -1011,3 +1011,87 @@ it automatically instead of showing a dead-end error."
 - Ed should also just close/reopen the app once after any deploy, same as
   before — this fix just means a scan-in-progress recovers on its own
   instead of dead-ending, not that reopening is no longer ever needed.
+
+---
+
+## 2026-09-26 (later still) — Nameplate scan on New Equipment; cascading equipment subtype
+
+Ed asked for two things after adding equipment for the first time:
+
+1. **No way to scan a nameplate straight from New Equipment.** The
+   existing nameplate scanner (`NameplateScanner.tsx`) only lives on Job
+   Detail and needs both a job and an equipment record already linked —
+   no help when you're creating the Equipment record itself. Added a
+   lighter scan button directly on the New/Edit Equipment form.
+2. **Category alone doesn't capture enough** — e.g. picking "Split
+   System" should then ask which physical unit this record is (outdoor or
+   indoor — each has its own nameplate) and then a further type choice
+   (Heat Pump Condenser vs. AC Condenser for outdoor; Furnace vs. Air
+   Handler for indoor); "Package Unit" should ask gas/electric vs. heat
+   pump vs. straight cool, etc. Researched realistic type choices for
+   every equipment category relevant to Ed's actual commercial HVAC/
+   refrigeration work and built them into cascading dropdowns.
+
+### What was built
+- **DB**: `supabase/migrations/0006_equipment_subtype.sql` — added
+  `equipment.unit_position` (`outdoor`/`indoor`, split systems only) and
+  `equipment.subtype` (free text, not an enum — so "Other" can hold
+  anything without needing a migration every time a new type comes up),
+  applied live via the Supabase MCP connector. Search index updated to
+  include `subtype`.
+- **`src/types/index.ts`**: `SPLIT_SYSTEM_SUBTYPES` (separate outdoor/
+  indoor lists) and `EQUIPMENT_SUBTYPE_OPTIONS` (per-category lists for
+  every other category that has real sub-choices — package unit/RTU, heat
+  pump, furnace, air handler, walk-in cooler/freezer, reach-in, ice
+  machine, exhaust fan, make-up air unit, mini-split, boiler, water
+  heater; `other` intentionally has none).
+- **`src/components/EquipmentTypeFields.tsx`** (new, shared): renders
+  whatever follow-up choice(s) a category needs — the Outdoor/Indoor
+  split for split systems, then a Type select scoped to that choice; a
+  plain Type select for every other category with a preset list; nothing
+  for categories without one. Every Type select ends with "Other (type
+  below)", which reveals a free-text field — used instead of a rigid enum
+  so nothing Ed runs into in the field is ever a dead end.
+  Wired into both `EquipmentForm.tsx` (the full New/Edit Equipment
+  screen) and JobForm's inline "+ New equipment" quick-add (New Call
+  flow), so the same cascade applies wherever equipment gets classified.
+- **`src/components/NameplateScanButton.tsx`** (new): Take Photo/Choose
+  from Library → OCR → fills whichever manufacturer/model/serial/
+  refrigerant/voltage/phase/MCA/MOCP fields it found, directly into the
+  form already on screen (no separate review screen needed — the form
+  fields ARE the review). No job/photo attachment involved, unlike the
+  existing Job Detail nameplate scanner, since there's no job yet at this
+  point. Wired into `EquipmentForm.tsx` above the Identity section.
+- **`src/lib/ocr.ts`** (new): pulled the shared OCR pipeline
+  (load image → contrast/grayscale canvas preprocessing → Tesseract via
+  dynamic import) out of `NameplateScanner.tsx` and `DispatchScan.tsx`,
+  which had it duplicated almost verbatim, into one place — now used by
+  those two plus the new `NameplateScanButton`.
+
+Also surfaced the new unit/subtype detail wherever equipment already
+shows up (`EquipmentDetail.tsx` header line, `SiteDetail.tsx`'s equipment
+list) so it's not invisible once saved.
+
+### Testing
+Ran a real local browser test (Playwright, local-only mode — same
+approach as previous sessions, temporary throwaway PIN, nothing
+committed): confirmed the Scan Nameplate button renders on New Equipment;
+confirmed the cascade end-to-end — default category (Split System) shows
+a Unit select, choosing Outdoor Unit reveals a Type select scoped to
+outdoor options, choosing "Other" reveals the free-text field, and
+switching category to Package Unit swaps straight to its own Type list
+with no Unit step. `tsc -b` and `vite build` both pass clean.
+
+**Not yet tested**: real on-device OCR scan from the New Equipment
+screen (same CDN/network limitation as always in this sandbox) — should
+behave the same as the already-verified Job Detail nameplate scanner
+since it reuses the same OCR pipeline, but worth a first real check.
+
+### To pick this back up next
+- Not yet deployed — sitting on `claude/review-notes-app-build-bkvmc1`.
+- First real on-device test of the New Equipment nameplate scan button.
+- Ed should try a few real category choices (a walk-in cooler, an RTU,
+  etc.) and say if any of the researched subtype lists are missing an
+  option he actually needs, or have wording he'd phrase differently —
+  these are free-text-escapable ("Other") but worth tightening if a
+  whole category of gear is missing a common real-world type.

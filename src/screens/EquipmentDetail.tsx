@@ -6,6 +6,8 @@ import StatusBadge from '../components/StatusBadge';
 import PhotoThumb from '../components/PhotoThumb';
 import { EQUIPMENT_CATEGORY_LABELS } from '../types';
 
+const UNIT_POSITION_LABELS = { outdoor: 'Outdoor Unit', indoor: 'Indoor Unit' };
+
 export default function EquipmentDetail() {
   const { id } = useParams();
   const equipment = useLiveQuery(() => (id ? db.equipment.get(id) : undefined), [id]);
@@ -28,7 +30,12 @@ export default function EquipmentDetail() {
       } />
       <div className="p-4 space-y-4">
         <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-4">
-          <div className="text-zinc-500 text-xs font-semibold mb-2">{EQUIPMENT_CATEGORY_LABELS[equipment.category]} · {equipment.location_at_site}</div>
+          <div className="text-zinc-500 text-xs font-semibold mb-2">
+            {EQUIPMENT_CATEGORY_LABELS[equipment.category]}
+            {equipment.unit_position && ` · ${UNIT_POSITION_LABELS[equipment.unit_position]}`}
+            {equipment.subtype && ` · ${equipment.subtype}`}
+            {equipment.location_at_site && ` · ${equipment.location_at_site}`}
+          </div>
           <div className="grid grid-cols-2 gap-y-2 gap-x-3">
             {specs.filter(([, v]) => v).map(([label, value]) => (
               <div key={label}>

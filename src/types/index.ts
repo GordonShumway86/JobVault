@@ -78,11 +78,15 @@ export interface Site {
   updated_at: string;
 }
 
+export type UnitPosition = 'outdoor' | 'indoor';
+
 export interface Equipment {
   id: string;
   owner_id: string;
   site_id: string;
   category: EquipmentCategory;
+  unit_position: UnitPosition | null;
+  subtype: string | null;
   nickname: string | null;
   location_at_site: string | null;
   manufacturer: string | null;
@@ -367,6 +371,123 @@ export const EQUIPMENT_CATEGORY_LABELS: Record<EquipmentCategory, string> = {
   boiler: 'Boiler',
   water_heater: 'Water Heater',
   other: 'Other',
+};
+
+// Split systems have two physical units, each with its own nameplate — the
+// subtype choices genuinely differ depending on which one this record is.
+export const SPLIT_SYSTEM_SUBTYPES: Record<UnitPosition, string[]> = {
+  outdoor: [
+    'Air Conditioner Condenser',
+    'Heat Pump Condenser',
+    'Dual Fuel Condenser (paired with gas furnace)',
+    'Refrigeration Condensing Unit',
+  ],
+  indoor: [
+    'Gas Furnace',
+    'Electric Furnace',
+    'Oil Furnace',
+    'Air Handler (Electric Heat Strip)',
+    'Air Handler (Cooling Only, No Heat)',
+    'Air Handler (Hydronic Coil)',
+    'Evaporator Coil',
+  ],
+};
+
+// A more specific type within a category — e.g. "Package Unit" alone
+// doesn't say gas/electric vs. heat pump vs. straight cool. `split_system`
+// isn't here since it's handled separately (see SPLIT_SYSTEM_SUBTYPES);
+// `other` has no preset list. Free text (an "Other" option in the UI) is
+// always available for anything not listed here.
+export const EQUIPMENT_SUBTYPE_OPTIONS: Partial<Record<EquipmentCategory, string[]>> = {
+  package_unit: [
+    'Gas/Electric (Gas Heat, Electric Cool)',
+    'Heat Pump (Electric Heat & Cool)',
+    'Straight Cool (No Heat)',
+    'All Electric (Electric Heat Strip)',
+    'Dual Fuel (Gas Heat + Heat Pump)',
+  ],
+  rtu: [
+    'Gas/Electric (Gas Heat, Electric Cool)',
+    'Heat Pump (Electric Heat & Cool)',
+    'Straight Cool (No Heat)',
+    'All Electric (Electric Heat Strip)',
+    'Dual Fuel (Gas Heat + Heat Pump)',
+  ],
+  heat_pump: [
+    'Air-Source Split System',
+    'Air-Source Package Unit',
+    'Ductless Mini-Split',
+    'Geothermal / Water-Source',
+  ],
+  furnace: [
+    'Gas (Natural Gas)',
+    'Gas (Propane/LP)',
+    'Electric',
+    'Oil',
+  ],
+  air_handler: [
+    'Electric Heat Strip',
+    'Cooling Only (No Heat)',
+    'Hydronic Coil (Hot Water Heat)',
+  ],
+  walk_in_cooler: [
+    'Self-Contained',
+    'Remote Condensing Unit',
+    'Multiplex / Rack System',
+  ],
+  walk_in_freezer: [
+    'Self-Contained',
+    'Remote Condensing Unit',
+    'Multiplex / Rack System',
+  ],
+  reach_in: [
+    'Reach-In Cooler',
+    'Reach-In Freezer',
+    'Dual-Temp (Cooler/Freezer)',
+    'Prep Table / Sandwich Unit',
+    'Glass Door Merchandiser',
+  ],
+  ice_machine: [
+    'Modular Ice Head (Remote Bin)',
+    'Self-Contained Undercounter',
+    'Ice/Water Dispenser',
+    'Flake Ice Machine',
+    'Cube Ice Machine',
+  ],
+  exhaust_fan: [
+    'Roof Exhaust Fan — Belt-Drive (Upblast)',
+    'Roof Exhaust Fan — Direct-Drive (Upblast)',
+    'Downblast Exhaust Fan',
+    'Inline Duct Fan',
+    'Wall-Mounted Exhaust Fan',
+  ],
+  make_up_air_unit: [
+    'Heated — Gas-Fired Direct',
+    'Heated — Gas-Fired Indirect',
+    'Heated — Electric',
+    'Unheated / Ventilation Only',
+    'Heated & Cooled (Conditioned)',
+  ],
+  mini_split: [
+    'Single-Zone',
+    'Multi-Zone',
+    'Wall-Mounted Head',
+    'Ceiling Cassette',
+    'Ducted Concealed Unit',
+  ],
+  boiler: [
+    'Gas-Fired (Standard/Atmospheric)',
+    'Gas-Fired (High-Efficiency Condensing)',
+    'Electric',
+    'Combi (Heat + Domestic Hot Water)',
+  ],
+  water_heater: [
+    'Gas (Tank)',
+    'Electric (Tank)',
+    'Tankless — Gas',
+    'Tankless — Electric',
+    'Hybrid Heat Pump',
+  ],
 };
 
 export const CUSTOMER_TYPE_LABELS: Record<CustomerType, string> = {

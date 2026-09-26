@@ -8,7 +8,9 @@ import { saveDraft, loadDraft, clearDraft } from '../lib/formDraft';
 import TopBar from '../components/TopBar';
 import SectionCard from '../components/SectionCard';
 import { Field, TextInput, TextArea, Select } from '../components/Field';
-import { EQUIPMENT_CATEGORY_LABELS, type EquipmentCategory, type EquipmentStatus } from '../types';
+import { EquipmentTypeFields } from '../components/EquipmentTypeFields';
+import NameplateScanButton from '../components/NameplateScanButton';
+import { EQUIPMENT_CATEGORY_LABELS, type EquipmentCategory, type EquipmentStatus, type UnitPosition } from '../types';
 
 export default function EquipmentForm() {
   const { id, siteId } = useParams();
@@ -20,6 +22,8 @@ export default function EquipmentForm() {
   const draftAppliedRef = useRef(false);
 
   const [category, setCategory] = useState<EquipmentCategory>('split_system');
+  const [unitPosition, setUnitPosition] = useState<UnitPosition | null>(null);
+  const [subtype, setSubtype] = useState<string | null>(null);
   const [nickname, setNickname] = useState('');
   const [location, setLocation] = useState('');
   const [manufacturer, setManufacturer] = useState('');
@@ -37,7 +41,8 @@ export default function EquipmentForm() {
 
   useEffect(() => {
     if (!editing || draftAppliedRef.current) return;
-    setCategory(editing.category); setNickname(editing.nickname ?? ''); setLocation(editing.location_at_site ?? '');
+    setCategory(editing.category); setUnitPosition(editing.unit_position ?? null); setSubtype(editing.subtype ?? null);
+    setNickname(editing.nickname ?? ''); setLocation(editing.location_at_site ?? '');
     setManufacturer(editing.manufacturer ?? ''); setModel(editing.model_number ?? ''); setSerial(editing.serial_number ?? '');
     setRefrigerant(editing.refrigerant_type ?? ''); setCapacity(editing.nominal_capacity ?? ''); setVoltage(editing.voltage ?? '');
     setPhase(editing.phase ?? ''); setMca(editing.mca ?? ''); setMocp(editing.mocp ?? '');
@@ -51,6 +56,8 @@ export default function EquipmentForm() {
     loadDraft(draftId).then((d) => {
       if (cancelled || !d) return;
       if (typeof d.category === 'string') setCategory(d.category as EquipmentCategory);
+      if (typeof d.unitPosition === 'string') setUnitPosition(d.unitPosition as UnitPosition);
+      if (typeof d.subtype === 'string') setSubtype(d.subtype);
       if (typeof d.nickname === 'string') setNickname(d.nickname);
       if (typeof d.location === 'string') setLocation(d.location);
       if (typeof d.manufacturer === 'string') setManufacturer(d.manufacturer);
@@ -75,7 +82,7 @@ export default function EquipmentForm() {
   // still being typed when the app gets interrupted can be lost.
   function persistDraft() {
     saveDraft(draftId, {
-      category, nickname, location, manufacturer, model, serial, refrigerant,
+      category, unitPosition, subtype, nickname, location, manufacturer, model, serial, refrigerant,
       capacity, voltage, phase, mca, mocp, installedDate, status, notes,
     });
   }
@@ -87,6 +94,7 @@ export default function EquipmentForm() {
     const now = new Date().toISOString();
     const rec = {
       id: editing?.id ?? makeId(), owner_id: ownerId, site_id: siteIdFinal, category,
+      unit_position: unitPosition, subtype: subtype?.trim() || null,
       nickname: nickname || null, location_at_site: location || null, manufacturer: manufacturer || null,
       model_number: model || null, serial_number: serial || null, manufacture_date: null,
       refrigerant_type: refrigerant || null, nominal_capacity: capacity || null, voltage: voltage || null,
@@ -104,12 +112,36 @@ export default function EquipmentForm() {
       <TopBar title={editing ? 'Edit Equipment' : 'New Equipment'} back />
       <div className="p-4 space-y-3" onBlur={persistDraft}>
         {site && <div className="text-zinc-500 text-sm -mt-1">At {site.name}</div>}
+
+        <SectionCard title="Scan Nameplate">
+          <NameplateScanButton
+            onExtracted={(extracted) => {
+              if (extracted.manufacturer) setManufacturer(extracted.manufacturer);
+              if (extracted.model_number) setModel(extracted.model_number);
+              if (extracted.serial_number) setSerial(extracted.serial_number);
+              if (extracted.refrigerant_type) setRefrigerant(extracted.refrigerant_type);
+              if (extracted.voltage) setVoltage(extracted.voltage);
+              if (extracted.phase) setPhase(extracted.phase);
+              if (extracted.mca) setMca(extracted.mca);
+              if (extracted.mocp) setMocp(extracted.mocp);
+            }}
+          />
+        </SectionCard>
+
         <SectionCard title="Identity">
           <Field label="Category">
-            <Select value={category} onChange={(e) => setCategory(e.target.value as EquipmentCategory)}>
+            <Select
+              value={category}
+              onChange={(e) => { setCategory(e.target.value as EquipmentCategory); setUnitPosition(null); setSubtype(null); }}
+            >
               {Object.entries(EQUIPMENT_CATEGORY_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
             </Select>
           </Field>
+          <EquipmentTypeFields
+            category={category}
+            value={{ unit_position: unitPosition, subtype }}
+            onChange={(next) => { setUnitPosition(next.unit_position); setSubtype(next.subtype); }}
+          />
           <Field label="Nickname / tag" hint="e.g. RTU-1, Walk-in #2"><TextInput value={nickname} onChange={(e) => setNickname(e.target.value)} /></Field>
           <Field label="Location at site"><TextInput value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Roof, north side" /></Field>
           <div className="grid grid-cols-2 gap-3">
