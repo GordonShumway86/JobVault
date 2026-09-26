@@ -3,14 +3,12 @@ import { Link, useParams } from 'react-router-dom';
 import { db } from '../lib/db';
 import TopBar from '../components/TopBar';
 import StatusBadge from '../components/StatusBadge';
-import { EQUIPMENT_CATEGORY_LABELS } from '../types';
-
-const UNIT_POSITION_LABELS = { outdoor: 'Outdoor Unit', indoor: 'Indoor Unit' };
+import { SYSTEM_CATEGORY_LABELS } from '../types';
 
 export default function SiteDetail() {
   const { id } = useParams();
   const site = useLiveQuery(() => (id ? db.sites.get(id) : undefined), [id]);
-  const equipment = useLiveQuery(() => (id ? db.equipment.where('site_id').equals(id).toArray() : []), [id]) ?? [];
+  const systems = useLiveQuery(() => (id ? db.systems.where('site_id').equals(id).toArray() : []), [id]) ?? [];
   const jobs = useLiveQuery(() => (id ? db.jobs.where('site_id').equals(id).reverse().sortBy('updated_at') : []), [id]) ?? [];
 
   if (!site) return <div><TopBar title="Site" back /><div className="p-6 text-zinc-500 text-sm">Loading…</div></div>;
@@ -35,22 +33,22 @@ export default function SiteDetail() {
         </div>
 
         <div className="flex gap-2">
-          <Link to={`/sites/${site.id}/equipment/new`} className="flex-1 text-center rounded-lg bg-zinc-800 text-white text-sm font-semibold py-3">+ Add Equipment</Link>
+          <Link to={`/sites/${site.id}/systems/new`} className="flex-1 text-center rounded-lg bg-zinc-800 text-white text-sm font-semibold py-3">+ Add System</Link>
           <Link to="/jobs/new" className="flex-1 text-center rounded-lg bg-blue-600 text-white text-sm font-semibold py-3">+ New Call</Link>
         </div>
 
         <div>
-          <h2 className="text-white font-bold text-base mb-2">Equipment</h2>
+          <h2 className="text-white font-bold text-base mb-2">Systems</h2>
           <div className="space-y-2.5">
-            {equipment.length === 0 && <div className="text-zinc-500 text-sm">No equipment on record.</div>}
-            {equipment.map((e) => (
-              <Link key={e.id} to={`/equipment/${e.id}`} className="block rounded-xl border border-zinc-800 bg-zinc-900/60 p-4">
-                <div className="text-white font-semibold text-sm">{e.nickname || `${e.manufacturer ?? ''} ${e.model_number ?? ''}`.trim() || EQUIPMENT_CATEGORY_LABELS[e.category]}</div>
+            {systems.length === 0 && <div className="text-zinc-500 text-sm">No systems on record.</div>}
+            {systems.map((s) => (
+              <Link key={s.id} to={`/systems/${s.id}`} className="block rounded-xl border border-zinc-800 bg-zinc-900/60 p-4">
+                <div className="text-white font-semibold text-sm">{s.nickname || s.system_type || SYSTEM_CATEGORY_LABELS[s.category]}</div>
                 <div className="text-zinc-500 text-xs mt-0.5">
-                  {EQUIPMENT_CATEGORY_LABELS[e.category]}
-                  {e.unit_position && ` · ${UNIT_POSITION_LABELS[e.unit_position]}`}
-                  {e.subtype && ` · ${e.subtype}`}
-                  {e.location_at_site && ` · ${e.location_at_site}`}
+                  {SYSTEM_CATEGORY_LABELS[s.category]}
+                  {s.system_type && ` · ${s.system_type}`}
+                  {s.configuration && ` · ${s.configuration}`}
+                  {s.location_at_site && ` · ${s.location_at_site}`}
                 </div>
               </Link>
             ))}

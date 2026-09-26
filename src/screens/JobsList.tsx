@@ -25,11 +25,11 @@ export default function JobsList() {
   const jobs = useLiveQuery(() => db.jobs.orderBy('updated_at').reverse().toArray(), []);
   const customers = useLiveQuery(() => db.customers.toArray(), []);
   const sites = useLiveQuery(() => db.sites.toArray(), []);
-  const equipment = useLiveQuery(() => db.equipment.toArray(), []);
+  const systems = useLiveQuery(() => db.systems.toArray(), []);
 
   const customerMap = useMemo(() => new Map((customers ?? []).map((c) => [c.id, c])), [customers]);
   const siteMap = useMemo(() => new Map((sites ?? []).map((s) => [s.id, s])), [sites]);
-  const equipmentMap = useMemo(() => new Map((equipment ?? []).map((e) => [e.id, e])), [equipment]);
+  const systemMap = useMemo(() => new Map((systems ?? []).map((s) => [s.id, s])), [systems]);
 
   let list = jobs ?? [];
   if (quickFilter && QUICK_FILTERS[quickFilter]) list = list.filter(QUICK_FILTERS[quickFilter]);
@@ -40,10 +40,11 @@ export default function JobsList() {
     list = list.filter((j) => {
       const c = customerMap.get(j.customer_id);
       const s = siteMap.get(j.site_id);
-      const e = j.equipment_id ? equipmentMap.get(j.equipment_id) : undefined;
+      const sys = j.system_id ? systemMap.get(j.system_id) : undefined;
       const haystack = [
         j.job_number, j.work_order_number, j.dispatch_number, c?.name, s?.name, s?.address, s?.city, s?.state,
-        e?.model_number, e?.serial_number, j.reason_for_call, j.technician_notes, j.diagnosis, j.work_performed,
+        sys?.system_type, sys?.legacy_model_number, sys?.legacy_serial_number,
+        j.reason_for_call, j.technician_notes, j.diagnosis, j.work_performed,
       ].filter(Boolean).join(' ').toLowerCase();
       return haystack.includes(needle);
     });
@@ -88,14 +89,14 @@ export default function JobsList() {
         {list.map((job) => {
           const c = customerMap.get(job.customer_id);
           const s = siteMap.get(job.site_id);
-          const e = job.equipment_id ? equipmentMap.get(job.equipment_id) : undefined;
+          const sys = job.system_id ? systemMap.get(job.system_id) : undefined;
           return (
             <Link key={job.id} to={`/jobs/${job.id}`} className="block rounded-xl border border-zinc-800 bg-zinc-900/60 p-4 active:bg-zinc-900">
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <div className="text-white font-semibold text-sm truncate">{c?.name ?? 'Unknown customer'}</div>
                   <div className="text-zinc-500 text-xs truncate">
-                    {s?.name}{s?.city ? ` — ${s.city}${s.state ? `, ${s.state}` : ''}` : ''}{e ? ` · ${e.nickname || e.model_number || ''}` : ''}
+                    {s?.name}{s?.city ? ` — ${s.city}${s.state ? `, ${s.state}` : ''}` : ''}{sys ? ` · ${sys.nickname || sys.system_type || ''}` : ''}
                   </div>
                 </div>
                 <StatusBadge status={job.status} />

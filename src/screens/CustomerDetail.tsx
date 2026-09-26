@@ -13,8 +13,8 @@ export default function CustomerDetail() {
   const sites = useLiveQuery(() => (id ? db.sites.where('customer_id').equals(id).toArray() : []), [id]) ?? [];
   const jobs = useLiveQuery(() => (id ? db.jobs.where('customer_id').equals(id).reverse().sortBy('updated_at') : []), [id]) ?? [];
   const siteIds = useMemo(() => sites.map((s) => s.id), [sites]);
-  const equipmentCount = useLiveQuery(
-    () => (siteIds.length ? db.equipment.where('site_id').anyOf(siteIds).count() : 0),
+  const systemsCount = useLiveQuery(
+    () => (siteIds.length ? db.systems.where('site_id').anyOf(siteIds).count() : 0),
     [siteIds],
   ) ?? 0;
 
@@ -26,7 +26,7 @@ export default function CustomerDetail() {
     if (!customer) return;
     const ok = window.confirm(
       `Delete ${customer.name} completely? This permanently removes ${sites.length} site${sites.length === 1 ? '' : 's'}, `
-      + `${equipmentCount} piece${equipmentCount === 1 ? '' : 's'} of equipment, and ${jobs.length} call${jobs.length === 1 ? '' : 's'} `
+      + `${systemsCount} system${systemsCount === 1 ? '' : 's'}, and ${jobs.length} call${jobs.length === 1 ? '' : 's'} `
       + `(with all their photos, notes, parts, and quotes). This cannot be undone.`,
     );
     if (!ok) return;

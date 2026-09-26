@@ -23,7 +23,8 @@ export default function JobDetail() {
   const job = useLiveQuery(() => (id ? db.jobs.get(id) : undefined), [id]);
   const customer = useLiveQuery(() => (job ? db.customers.get(job.customer_id) : undefined), [job?.customer_id]);
   const site = useLiveQuery(() => (job ? db.sites.get(job.site_id) : undefined), [job?.site_id]);
-  const equipment = useLiveQuery(() => (job?.equipment_id ? db.equipment.get(job.equipment_id) : undefined), [job?.equipment_id]);
+  const system = useLiveQuery(() => (job?.system_id ? db.systems.get(job.system_id) : undefined), [job?.system_id]);
+  const components = useLiveQuery(() => (system ? db.components.where('system_id').equals(system.id).toArray() : []), [system?.id]) ?? [];
   const activity = useLiveQuery(() => (id ? db.job_activity.where('job_id').equals(id).sortBy('created_at') : []), [id]) ?? [];
   const attachments = useLiveQuery(() => (id ? db.job_attachments.where('job_id').equals(id).toArray() : []), [id]) ?? [];
   const followUps = useLiveQuery(() => (id ? db.follow_up_tasks.where('job_id').equals(id).sortBy('due_date') : []), [id]) ?? [];
@@ -116,9 +117,9 @@ export default function JobDetail() {
             <Link to={`/sites/${site?.id}`} className="text-zinc-400 text-sm truncate block">
               {site?.name}{site?.address ? ` — ${site.address}` : ''}{site?.city ? `, ${site.city}` : ''}{site?.state ? `, ${site.state}` : ''}
             </Link>
-            {equipment && (
-              <Link to={`/equipment/${equipment.id}`} className="text-zinc-500 text-xs truncate block mt-0.5">
-                {equipment.nickname || `${equipment.manufacturer ?? ''} ${equipment.model_number ?? ''}`}
+            {system && (
+              <Link to={`/systems/${system.id}`} className="text-zinc-500 text-xs truncate block mt-0.5">
+                {system.nickname || system.system_type}
               </Link>
             )}
           </div>
@@ -153,7 +154,7 @@ export default function JobDetail() {
         </SectionCard>
 
         <SectionCard title="Photos" subtitle={`${attachments.length} attached`}>
-          <PhotoUploader jobId={job.id} equipmentId={job.equipment_id} />
+          <PhotoUploader jobId={job.id} systemId={job.system_id} />
           {attachments.length > 0 && (
             <div className="grid grid-cols-3 gap-2 mt-2">
               {attachments.map((a) => <PhotoThumb key={a.id} attachment={a} />)}
@@ -162,10 +163,14 @@ export default function JobDetail() {
         </SectionCard>
 
         <SectionCard title="Scan Nameplate" subtitle="Reads model/serial/specs from a photo — review before saving">
-          {equipment ? (
-            <NameplateScanner jobId={job.id} equipment={equipment} />
+          {!system ? (
+            <div className="text-zinc-500 text-sm">Link this call to a system first (tap Edit) to scan a nameplate.</div>
+          ) : components.length === 0 ? (
+            <div className="text-zinc-500 text-sm">
+              <Link to={`/systems/${system.id}/edit`} className="text-blue-400 font-medium">Add a component</Link> to this system first to scan its nameplate.
+            </div>
           ) : (
-            <div className="text-zinc-500 text-sm">Link this call to a piece of equipment first (tap Edit) to scan its nameplate.</div>
+            <NameplateScanner jobId={job.id} systemId={system.id} components={components} />
           )}
         </SectionCard>
 

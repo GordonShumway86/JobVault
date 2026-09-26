@@ -1254,3 +1254,258 @@ segmentation mode.
 - Everything else from the entry above (the hierarchical Systems/
   Components schema, still in progress as of this entry) is unrelated to
   this fix and tracked separately.
+## 2026-09-26 (later still) — Hierarchical Systems/Components schema, replacing flat Equipment
+
+Ed (via a spec already reviewed and approved) asked for the flat `equipment`
+model to become a real Parent System -> Component(s) hierarchy: a System is
+the top-level unit at a site ("Walk-in Cooler," "Split System #4," "Packaged
+RTU #2"), a Component is a physical part with its own nameplate
+("Condensing Unit #1," "Evaporator Coil," "Furnace," "VAV Box #3"), and one
+System has many Components.
+
+### Taxonomy
+Built as the dynamic dropdown source, same spirit as the existing
+`SPLIT_SYSTEM_SUBTYPES`/`EQUIPMENT_SUBTYPE_OPTIONS` pattern but restructured
+for System Type -> allowed Component Types (`src/types/index.ts`):
+- **Commercial Refrigeration** — Walk-in Cooler/Freezer, Reach-in
+  Cooler/Freezer; components: Condensing Unit, Evaporator/Unit Cooler,
+  Self-Contained Package.
+- **Split Systems** — one System Type ("Split System"), plus a System
+  Configuration field (Single-stage/Multi-stage/Dual-Fuel/Twinned); indoor
+  components (Gas Furnace, Electric/Hydronic Air Handler, Water-Source Heat
+  Pump, Evaporator Coil) and outdoor components (AC/Heat Pump Condenser)
+  are genuinely different lists, so adding a component asks Position first.
+- **Packaged Units/RTUs** — Packaged RTU/Gas-Electric/Heat Pump/Dual-Fuel;
+  components: VAV Box, CAV Box, Bypass Damper (no position split).
+- **Ductless/VRF** — Mini-Split, VRF/VRV System; outdoor (VRF Heat Recovery
+  Condenser, Heat Pump Condenser) vs. indoor (Wall Mount, Ceiling Cassette,
+  Ducted Concealed, Floor Mount, BC Controller/Branch Selector) components.
+- **Hydronics/Plant** — Chiller (Air/Water-Cooled), Boiler (Gas/Electric/
+  Oil), Air Handler (AHU), Makeup Air Unit (MAU); components: Circulator
+  Pump, Expansion Tank, Fluid Cooler, Cooling Tower.
+- **Other** — kept as a 6th bucket (not in Ed's spec verbatim, added so
+  categories with no clean taxonomy fit — old ice machines, exhaust fans —
+  have somewhere honest to land instead of being force-fit) with no preset
+  list, same as the existing "Other" pattern.
+
+Every System Type and Component Type dropdown ends with "Other (type
+below)," matching `EquipmentTypeFields.tsx`'s existing pattern exactly —
+nothing is ever a dead end for a type not on the list. That file was
+rewritten in place (`src/components/EquipmentTypeFields.tsx`) into
+`SystemTypeFields` (Category -> Type, + Configuration for split systems)
+and `ComponentTypeFields` (Position -> Type where the category needs one).
+
+### Component fields
+Designation/Name, Brand/Manufacturer, Model Number, Serial Number,
+Refrigerant Type, Voltage, Phase, MCA, MOCP — exactly the 8 fields
+`nameplateOcr.ts`'s `extractNameplateFields` already returns, reused
+as-is (no duplicated extraction logic).
+
+### Database migration
+`supabase/migrations/0007_systems_components.sql` (**not yet applied** —
+this sandbox has no Supabase network access, same limitation as every
+migration before it; needs a session with Supabase MCP access to run it) —
+- Creates `systems` and `components` tables, owner-scoped RLS mirroring the
+  `equipment` pattern in `0001_init.sql` exactly.
+- Migrates every existing `equipment` row into `systems` **with zero
+  components**, per Ed's explicit instruction — no component is
+  auto-created, so nothing blocks a System from being saved without one.
+  Decisions made and documented in the migration file itself:
+  - The **id is preserved** (`insert into systems (id, ...) select id, ...
+    from equipment`), so every existing `jobs`/`job_attachments`/`parts`/
+    `diagnostic_readings` reference to an old equipment row keeps resolving
+    to the same row under its new name.
+  - The old `equipment_id` columns on those four tables are **renamed to
+    `system_id`** and repointed at `systems(id)` — a real rename (same
+    pattern as `jobs.customer_complaint` -> `reason_for_call` back on
+    2026-09-25), not a compatibility alias, since every reference is
+    updated in the same migration and in the app code below.
+  - Old `equipment.category` (16 values) doesn't map 1:1 onto the new
+    6-bucket taxonomy, so nothing is lost: every migrated row's new
+    `system_type` is set to its old `subtype` (if it had one, with
+    "Outdoor Unit — "/"Indoor Unit — " prefixed back on if
+    `unit_position` was set) or its old category's label, preserved as
+    free text even where the `category` bucket it lands in is only an
+    approximate best fit (e.g. `heat_pump` -> `split_system`, `exhaust_fan`
+    -> `other`).
+  - Old nameplate fields (manufacturer/model/serial/refrigerant/voltage/
+    phase/mca/mocp) have nowhere else to go once a migrated row has no
+    component, so they're preserved as `legacy_*` columns on `systems` —
+    populated only by this migration, never written to by the current
+    System-creation UI, shown on `SystemDetail.tsx` when present.
+  - The old `equipment` table (and its now-unused `equipment_category`
+    enum) are dropped at the end of this same migration file, confirmed
+    via a full codebase search that nothing queries it directly anymore.
+
+### Local (Dexie/IndexedDB) side
+`src/lib/db.ts` bumped to schema v3: `systems`/`components` tables replace
+`equipment`; a real `.upgrade()` function converts any locally cached
+`equipment` rows using the exact same category/system_type mapping logic
+as the SQL migration (`mapLegacyEquipmentToSystem`, kept in lockstep with
+the SQL by hand since there's no shared codegen), so a device that's been
+offline a while and still has old cached rows converts the same way a
+fresh pull from Supabase would.
+
+### Everywhere else `equipment` was read/written, updated
+`src/lib/repo.ts` (cascading delete now purges components + systems),
+`src/lib/sync.ts` (synced-tables list), `src/screens/SiteDetail.tsx`,
+`src/screens/CustomerDetail.tsx`, `src/screens/JobsList.tsx`,
+`src/screens/JobDetail.tsx`, `src/screens/JobForm.tsx`'s inline "+ New
+system" quick-add (deliberately lighter than before — just Category/Type,
+no manufacturer/model/serial fields inline anymore, since that detail is
+now per-component and the New Call screen isn't the right place to build
+out a whole component list; a note in the UI says so), `src/components/
+PhotoUploader.tsx` (`equipmentId` prop -> `systemId`). New `SystemForm.tsx`
+and `SystemDetail.tsx` replace `EquipmentForm.tsx`/`EquipmentDetail.tsx`
+(routes: `/systems/:id`, `/systems/:id/edit`, `/sites/:siteId/systems/new`).
+
+**Job Detail's "Scan Nameplate" section** (`NameplateScanner.tsx`) needed a
+real design change, not just a rename: a System has no nameplate of its
+own anymore, so the scanner now targets one specific Component of the
+job's System — a picker appears when the System has more than one
+component, and the hint text on Job Detail now says "add a component to
+this system first" instead of "link equipment first" when there are none.
+
+The per-field draft autosave pattern (`formDraft.ts`) carries over
+unchanged to `SystemForm.tsx`, including the full in-progress component
+list (an array of plain objects, JSON-serializable like everything else
+`saveDraft` already handles).
+
+### Verification
+`tsc -b` and `vite build` both pass clean.
+
+Ran a real Playwright browser test against the local Vite dev server in
+local-only mode (temporary `.env.local` — a throwaway PIN hash plus a
+**fake** `https://fake.supabase.local` Supabase URL/anon key so the app's
+existing auto-login code path runs for real; Playwright's `page.route()`
+intercepted the `/auth/v1/token` call and fulfilled it with a synthetic
+session — no real network call ever left the sandbox, and no real
+credential was ever created or committed; `.env.local` was deleted before
+finishing). This let forms that need a real signed-in owner id (which
+several already required even before this change, e.g. `CustomerForm.tsx`)
+actually save, not just render:
+- **Legacy migration**: seeded a v2-shaped local database (using the app's
+  own Dexie library and its actual pre-v3 `version(1)`/`version(2)` schema
+  definitions, so this is the real upgrade path, not a simulation) with one
+  `equipment` row (split-system, outdoor, "Heat Pump Condenser" subtype,
+  full nameplate fields filled in), reloaded the app, and confirmed: the
+  `equipment` object store is gone, a `System` now exists at the same id,
+  `category` mapped to `split_system`, `system_type` reads "Outdoor Unit —
+  Heat Pump Condenser", the legacy nameplate fields (manufacturer/model/
+  etc.) are preserved on the System, it has zero components, and
+  `SystemDetail.tsx` renders all of that correctly.
+- Also ran the exact same category-mapping logic as a plain Node unit
+  check (`mapLegacyEquipmentToSystem`, exported from `db.ts` for this)
+  against a split-system-with-subtype case, a walk-in-cooler-with-no-
+  subtype case (falls back to the category label), and an
+  exhaust-fan case (lands in the new `other` bucket but keeps its real
+  subtype text verbatim) — all correct.
+- **Real create flow**: created a Customer -> Site -> System ("Split
+  System #4") with 2 components (an outdoor Heat Pump Condenser named
+  "Condenser 1," an indoor Gas Furnace named "Furnace 1"). For component
+  1, used the *real* "Scan Nameplate — Choose from Library" button, a
+  real file pick, and the real `runOcr()`/`extractNameplateFields()`
+  pipeline — only the Tesseract.js module itself was stubbed (Playwright
+  intercepted Vite's dev-bundled `tesseract__js.js` and replaced it with a
+  fake `createWorker` returning fixed nameplate text, since this sandbox
+  can't reach the real Tesseract CDN), confirming the extracted fields
+  landed in component 1's fields specifically and did **not** touch
+  component 2's. Saved, confirmed both components show correctly on
+  `SystemDetail.tsx`, then did a fresh navigation (not just in-memory
+  state) back to the same System and confirmed every field — including
+  the scanned manufacturer/model/serial — round-tripped correctly through
+  IndexedDB.
+
+One real bug caught and fixed *during* this test, worth noting for future
+OCR-stubbing tests: Vite's dev-mode CJS interop for a dynamic `import()`
+reads the faked module's **default** export (mirroring how the real,
+CommonJS-built tesseract.js becomes a `default` export after bundling) —
+a stub that only exports `createWorker` as a named export silently loses
+it (`m.default` is `undefined`, so the interop's property-spread copies
+nothing), producing a confusing "createWorker is not a function" with no
+indication the stub itself was the problem. Fix (test-only, not app code):
+the stub also exports `default: { createWorker }`.
+
+### Not yet verified — needs a real device / live Supabase session
+- **The SQL migration itself has not been applied anywhere** — this
+  sandbox cannot reach Supabase. It needs to be run by a session with
+  Supabase MCP access, against the real `bxagejspufjuffadxkkl` project,
+  before any of this is live. Read the migration file's own comments
+  first — it documents every non-obvious decision (id preservation,
+  column renames, category-mapping choices) inline.
+- Real on-device test of the whole flow: create a System, add components,
+  scan a *real* nameplate with a real phone and real Tesseract CDN access,
+  confirm accuracy (same standing item as every other OCR feature in this
+  app — see the multiple nameplate-scanner entries above).
+- A device that already has real cached `equipment` rows in its local
+  IndexedDB (from using the live app before this change) hasn't been
+  tested going through the real Dexie v3 upgrade — the Playwright test
+  above exercises the identical code path against synthetic data, but a
+  real device's actual cached rows are the real test.
+- Whether Ed wants a way to delete a whole System (cascading its
+  components) from `SystemDetail.tsx` — not asked for in the spec, so not
+  built; components can be removed one at a time from `SystemForm.tsx`,
+  but there's no "Delete System" button (Equipment never had one either).
+
+---
+
+## 2026-09-26 (yet again still) — Independent review of the Systems/Components branch, 3 real bugs found and fixed
+
+Before showing the hierarchical schema branch to Ed as mergeable, ran a
+high-effort independent code review against the diff (not just trusting
+the building agent's own report). Found three real, distinct problems:
+
+1. **Silent data loss in the migration.** `0007_systems_components.sql`'s
+   own header comment promised every old `equipment` field survives as a
+   `legacy_*` column on `systems`, but six columns
+   (`manufacture_date`, `nominal_capacity`, `compressor_model`,
+   `filter_sizes`, `belt_sizes`, `warranty_notes`) had no `legacy_*`
+   counterpart at all — they'd have been permanently destroyed the moment
+   `drop table equipment` ran at the end of the same migration. Fixed:
+   added all six as `legacy_*` columns on `systems`, included them in the
+   migration's `insert`, and made the same fix in the local Dexie upgrade
+   (`mapLegacyEquipmentToSystem` in `db.ts`) and the `System` type
+   (`types/index.ts`), plus surfaced them on `SystemDetail.tsx` so
+   migrated data isn't invisible once it lands.
+2. **Real Dexie migration bug: reading a store the same version deletes.**
+   `db.ts`'s v3 both deleted the `equipment` object store
+   (`equipment: null`) and read from it inside that same version's
+   `.upgrade()` callback — Dexie applies a version's schema diff (store
+   deletion included) before running its `.upgrade()` callback, so
+   `tx.table('equipment')` could throw or come back empty depending on
+   timing, on every real device that has old cached equipment rows (i.e.
+   every existing installed user) — exactly the population this migration
+   says it protects. Fixed: split into v3 (adds `systems`/`components`,
+   copies old equipment into them, leaves the `equipment` store physically
+   present but unused) and a new v4 (`equipment: null`) that drops it only
+   after the copy has already run. Verified for real, not just by
+   reasoning about it: wrote a standalone `fake-indexeddb` + real Dexie
+   script (temporary, removed after) that seeds a v1-shaped local DB with
+   an equipment row and a job pointing at it, runs the actual v1→v4
+   version chain from `db.ts`, and asserts the migrated System, the
+   preserved `legacy_manufacturer`, the job's new `system_id`, and the
+   dropped `equipment` store all come out correct — passed clean.
+3. **The OCR sparse-text-mode fix (this same day, separate NOTES.md entry
+   above) got silently reverted** — this branch was built from a point
+   before that fix landed, so its copy of `ocr.ts` never had the `mode`
+   parameter, and both nameplate scan call sites had regressed to
+   Tesseract's plain default mode. Fixed by reapplying the exact same
+   `mode: 'label' | 'document'` change here, with the two nameplate
+   scanners passing `'label'` and the dispatch ticket scanner left on the
+   default — same as the standalone fix already deployed.
+
+`tsc -b` and `vite build` both pass clean after all three fixes.
+
+### To pick this back up next
+- Still not merged into `claude/hvac-hierarchical-schema-ocr-46oa7n` or
+  deployed — this branch (`worktree-agent-a4c267fa1f3ebfe6b`) needs to be
+  merged in (expect a small conflict on `NOTES.md`/`ocr.ts`/`.gitignore`
+  against the sparse-text-mode fix already on the main branch, since they
+  diverged from the same point), then the whole thing reviewed with Ed
+  before it touches production or the real Supabase project.
+- The SQL migration has still never been applied anywhere — needs a
+  session with real Supabase MCP access.
+- Real on-device test, and a real device with genuinely pre-existing
+  cached `equipment` rows, are both still outstanding — everything above
+  was verified with synthetic data through the real code paths, never a
+  real phone.
