@@ -1189,3 +1189,49 @@ fields. `tsc -b` and `vite build` both pass clean.
   out in full rather than abbreviate it (a deliberate, safety-motivated
   choice, not an oversight) — worth revisiting only if a genuinely
   reliable way to disambiguate table columns from OCR text turns up.
+
+**Update**: deployed (fast-forward into `claude/service-log-hvac-app-ssx82g`,
+confirmed via the Vercel MCP connector that `job-vault-six-mu.vercel.app`
+rebuilt fresh and now aliases to it, commit `da5beef`). Live as of this
+entry.
+
+---
+
+## 2026-09-26 (end of session) — Stopping here for the day
+
+Ed's checking the app on his phone tomorrow (real device, real internet —
+the first real test of everything from today: the two OCR-scanner fixes
+from earlier, the New Equipment nameplate scan button, the cascading
+equipment category/subtype dropdowns, and the retuned nameplate
+extraction for table-layout plates). We'll confirm what's next once he's
+had a chance to use it for real.
+
+**Everything from today is live** on `job-vault-six-mu.vercel.app` as of
+commit `da5beef` — nothing left sitting only on a branch.
+
+### What to check first when this picks back up
+1. **Nameplate scan, same Heatcraft plate or a new one** — does
+   manufacturer/model/serial/refrigerant/voltage/phase actually come
+   through now on a real scan (not just the hand-transcribed text this
+   session verified against)? MCA/MOCP are expected to stay blank on a
+   plate that spells those labels out in full (by design, see above) —
+   that's not a bug to report, just read them off the plate by hand.
+2. **New Equipment nameplate scan button** — first real test of this
+   whole feature (it existed only in local sandbox testing before today).
+3. **Cascading equipment category/subtype dropdowns** — first real test:
+   does the Split System → Outdoor/Indoor → Type flow make sense in
+   practice, and are any of the researched Type lists (package unit,
+   walk-in cooler, etc.) missing a real-world option Ed actually needs?
+4. If the nameplate scan still comes back thin or wrong on a real photo,
+   use the new "Show raw scanned text" toggle and share what it actually
+   read — that's the fastest way to tune the regexes further, since this
+   sandbox still can't run real OCR itself to iterate blind.
+
+### Also still open from earlier sessions (unchanged, not urgent)
+- No cross-check that a related record's owner matches the parent's
+  owner (e.g. a part on a job) — fine for the current single-owner
+  reality, worth hardening before any multi-user future.
+- Deleting a customer/call doesn't remove already-uploaded photo files
+  from Supabase Storage, only the database rows.
+- The dispatch scanner's `?returnTo=job` path (New Call → Scan a ticket
+  instead) still hasn't had a real on-device OCR test.
