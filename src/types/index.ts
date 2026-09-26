@@ -103,11 +103,17 @@ export interface System {
   legacy_manufacturer: string | null;
   legacy_model_number: string | null;
   legacy_serial_number: string | null;
+  legacy_manufacture_date: string | null;
   legacy_refrigerant_type: string | null;
+  legacy_nominal_capacity: string | null;
   legacy_voltage: string | null;
   legacy_phase: string | null;
   legacy_mca: string | null;
   legacy_mocp: string | null;
+  legacy_compressor_model: string | null;
+  legacy_filter_sizes: string | null;
+  legacy_belt_sizes: string | null;
+  legacy_warranty_notes: string | null;
   created_at: string;
   updated_at: string;
 }

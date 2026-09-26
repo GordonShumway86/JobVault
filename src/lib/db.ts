@@ -83,10 +83,14 @@ class ServiceLogDB extends Dexie {
     // the SQL migration so a device that's been offline for a while (and
     // still has old cached `equipment` rows) converts the same way a fresh
     // pull from Supabase would.
+    // Dexie applies an object-store deletion as soon as this version's
+    // schema diff runs, before its own .upgrade() callback executes — so
+    // `equipment` can't be dropped in the same version whose .upgrade()
+    // still needs to read it. Keep it present here (untouched) and drop it
+    // in v4 instead, once the copy below has already run.
     this.version(3).stores({
       systems: 'id, site_id, status, updated_at',
       components: 'id, system_id, updated_at',
-      equipment: null,
       jobs: 'id, job_number, customer_id, site_id, system_id, status, created_at, updated_at',
       job_attachments: 'id, job_id, system_id, category, created_at',
       parts: 'id, job_id, system_id, status, updated_at',
@@ -102,6 +106,11 @@ class ServiceLogDB extends Dexie {
           delete record.equipment_id;
         });
       }
+    });
+    // v4: now that every old `equipment` row has been copied into `systems`
+    // (v3's upgrade, above), the old store can finally be dropped.
+    this.version(4).stores({
+      equipment: null,
     });
   }
 }
@@ -136,8 +145,11 @@ export function mapLegacyEquipmentToSystem(e: any) {
     installed_date: e.installed_date ?? null, system_notes: e.equipment_notes ?? null,
     status: e.status ?? 'active',
     legacy_manufacturer: e.manufacturer ?? null, legacy_model_number: e.model_number ?? null,
-    legacy_serial_number: e.serial_number ?? null, legacy_refrigerant_type: e.refrigerant_type ?? null,
+    legacy_serial_number: e.serial_number ?? null, legacy_manufacture_date: e.manufacture_date ?? null,
+    legacy_refrigerant_type: e.refrigerant_type ?? null, legacy_nominal_capacity: e.nominal_capacity ?? null,
     legacy_voltage: e.voltage ?? null, legacy_phase: e.phase ?? null, legacy_mca: e.mca ?? null, legacy_mocp: e.mocp ?? null,
+    legacy_compressor_model: e.compressor_model ?? null, legacy_filter_sizes: e.filter_sizes ?? null,
+    legacy_belt_sizes: e.belt_sizes ?? null, legacy_warranty_notes: e.warranty_notes ?? null,
     created_at: e.created_at, updated_at: e.updated_at,
   };
 }

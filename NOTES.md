@@ -1384,3 +1384,66 @@ the stub also exports `default: { createWorker }`.
   components) from `SystemDetail.tsx` — not asked for in the spec, so not
   built; components can be removed one at a time from `SystemForm.tsx`,
   but there's no "Delete System" button (Equipment never had one either).
+
+---
+
+## 2026-09-26 (yet again still) — Independent review of the Systems/Components branch, 3 real bugs found and fixed
+
+Before showing the hierarchical schema branch to Ed as mergeable, ran a
+high-effort independent code review against the diff (not just trusting
+the building agent's own report). Found three real, distinct problems:
+
+1. **Silent data loss in the migration.** `0007_systems_components.sql`'s
+   own header comment promised every old `equipment` field survives as a
+   `legacy_*` column on `systems`, but six columns
+   (`manufacture_date`, `nominal_capacity`, `compressor_model`,
+   `filter_sizes`, `belt_sizes`, `warranty_notes`) had no `legacy_*`
+   counterpart at all — they'd have been permanently destroyed the moment
+   `drop table equipment` ran at the end of the same migration. Fixed:
+   added all six as `legacy_*` columns on `systems`, included them in the
+   migration's `insert`, and made the same fix in the local Dexie upgrade
+   (`mapLegacyEquipmentToSystem` in `db.ts`) and the `System` type
+   (`types/index.ts`), plus surfaced them on `SystemDetail.tsx` so
+   migrated data isn't invisible once it lands.
+2. **Real Dexie migration bug: reading a store the same version deletes.**
+   `db.ts`'s v3 both deleted the `equipment` object store
+   (`equipment: null`) and read from it inside that same version's
+   `.upgrade()` callback — Dexie applies a version's schema diff (store
+   deletion included) before running its `.upgrade()` callback, so
+   `tx.table('equipment')` could throw or come back empty depending on
+   timing, on every real device that has old cached equipment rows (i.e.
+   every existing installed user) — exactly the population this migration
+   says it protects. Fixed: split into v3 (adds `systems`/`components`,
+   copies old equipment into them, leaves the `equipment` store physically
+   present but unused) and a new v4 (`equipment: null`) that drops it only
+   after the copy has already run. Verified for real, not just by
+   reasoning about it: wrote a standalone `fake-indexeddb` + real Dexie
+   script (temporary, removed after) that seeds a v1-shaped local DB with
+   an equipment row and a job pointing at it, runs the actual v1→v4
+   version chain from `db.ts`, and asserts the migrated System, the
+   preserved `legacy_manufacturer`, the job's new `system_id`, and the
+   dropped `equipment` store all come out correct — passed clean.
+3. **The OCR sparse-text-mode fix (this same day, separate NOTES.md entry
+   above) got silently reverted** — this branch was built from a point
+   before that fix landed, so its copy of `ocr.ts` never had the `mode`
+   parameter, and both nameplate scan call sites had regressed to
+   Tesseract's plain default mode. Fixed by reapplying the exact same
+   `mode: 'label' | 'document'` change here, with the two nameplate
+   scanners passing `'label'` and the dispatch ticket scanner left on the
+   default — same as the standalone fix already deployed.
+
+`tsc -b` and `vite build` both pass clean after all three fixes.
+
+### To pick this back up next
+- Still not merged into `claude/hvac-hierarchical-schema-ocr-46oa7n` or
+  deployed — this branch (`worktree-agent-a4c267fa1f3ebfe6b`) needs to be
+  merged in (expect a small conflict on `NOTES.md`/`ocr.ts`/`.gitignore`
+  against the sparse-text-mode fix already on the main branch, since they
+  diverged from the same point), then the whole thing reviewed with Ed
+  before it touches production or the real Supabase project.
+- The SQL migration has still never been applied anywhere — needs a
+  session with real Supabase MCP access.
+- Real on-device test, and a real device with genuinely pre-existing
+  cached `equipment` rows, are both still outstanding — everything above
+  was verified with synthetic data through the real code paths, never a
+  real phone.

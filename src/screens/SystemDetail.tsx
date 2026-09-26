@@ -19,9 +19,12 @@ export default function SystemDetail() {
 
   const legacySpecs: [string, string | null][] = [
     ['Manufacturer', system.legacy_manufacturer], ['Model #', system.legacy_model_number],
-    ['Serial #', system.legacy_serial_number], ['Refrigerant', system.legacy_refrigerant_type],
+    ['Serial #', system.legacy_serial_number], ['Manufacture date', system.legacy_manufacture_date],
+    ['Refrigerant', system.legacy_refrigerant_type], ['Nominal capacity', system.legacy_nominal_capacity],
     ['Voltage', system.legacy_voltage], ['Phase', system.legacy_phase],
     ['MCA', system.legacy_mca], ['MOCP', system.legacy_mocp],
+    ['Compressor model', system.legacy_compressor_model], ['Filter sizes', system.legacy_filter_sizes],
+    ['Belt sizes', system.legacy_belt_sizes], ['Warranty notes', system.legacy_warranty_notes],
   ];
   const legacySpecsFilled = legacySpecs.filter(([, v]) => v);
 

@@ -9,10 +9,15 @@
 --
 -- 1. Every existing `equipment` row becomes a System with zero components
 --    (Ed's explicit instruction — no component is auto-created for it).
---    Its old nameplate fields (manufacturer/model/serial/etc.) have nowhere
---    else to go once the row has no component, so they're preserved as
---    `legacy_*` columns on `systems`, populated only by this migration and
---    never written to by the app's current System-creation UI.
+--    ALL of its old data fields (manufacturer/model/serial/manufacture_date/
+--    refrigerant_type/nominal_capacity/voltage/phase/mca/mocp/
+--    compressor_model/filter_sizes/belt_sizes/warranty_notes) have nowhere
+--    else to go once the row has no component, so every one of them is
+--    preserved as its own `legacy_*` column on `systems`, populated only by
+--    this migration and never written to by the app's current
+--    System-creation UI. None of the 14 old data columns are dropped
+--    without a legacy_* home — verified against the full column list in
+--    0001_init.sql's `create table equipment`.
 -- 2. `equipment.category` (16 old values: split_system, package_unit, rtu,
 --    heat_pump, furnace, air_handler, walk_in_cooler, walk_in_freezer,
 --    reach_in, ice_machine, exhaust_fan, make_up_air_unit, mini_split,
@@ -63,11 +68,17 @@ create table systems (
   legacy_manufacturer text,
   legacy_model_number text,
   legacy_serial_number text,
+  legacy_manufacture_date date,
   legacy_refrigerant_type text,
+  legacy_nominal_capacity text,
   legacy_voltage text,
   legacy_phase text,
   legacy_mca text,
   legacy_mocp text,
+  legacy_compressor_model text,
+  legacy_filter_sizes text,
+  legacy_belt_sizes text,
+  legacy_warranty_notes text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -85,8 +96,10 @@ create index systems_search_idx on systems using gin (
 insert into systems (
   id, owner_id, site_id, category, system_type, configuration, nickname, location_at_site,
   installed_date, system_notes, status,
-  legacy_manufacturer, legacy_model_number, legacy_serial_number, legacy_refrigerant_type,
-  legacy_voltage, legacy_phase, legacy_mca, legacy_mocp, created_at, updated_at
+  legacy_manufacturer, legacy_model_number, legacy_serial_number, legacy_manufacture_date,
+  legacy_refrigerant_type, legacy_nominal_capacity, legacy_voltage, legacy_phase, legacy_mca, legacy_mocp,
+  legacy_compressor_model, legacy_filter_sizes, legacy_belt_sizes, legacy_warranty_notes,
+  created_at, updated_at
 )
 select
   e.id, e.owner_id, e.site_id,
@@ -128,8 +141,10 @@ select
     end))
   ),
   null, e.nickname, e.location_at_site, e.installed_date, e.equipment_notes, e.status,
-  e.manufacturer, e.model_number, e.serial_number, e.refrigerant_type,
-  e.voltage, e.phase, e.mca, e.mocp, e.created_at, e.updated_at
+  e.manufacturer, e.model_number, e.serial_number, e.manufacture_date,
+  e.refrigerant_type, e.nominal_capacity, e.voltage, e.phase, e.mca, e.mocp,
+  e.compressor_model, e.filter_sizes, e.belt_sizes, e.warranty_notes,
+  e.created_at, e.updated_at
 from equipment e;
 
 -- ---------------------------------------------------------------------------
