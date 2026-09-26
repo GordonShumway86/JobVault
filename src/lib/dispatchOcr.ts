@@ -42,7 +42,15 @@ export function extractDispatchFields(rawText: string): DispatchExtraction {
   if (pipeLine) {
     const [left, right] = pipeLine.split('|').map((s) => s.trim());
     if (left) customerName = left;
-    if (right) siteName = /^\d+$/.test(right) ? `${left} #${right}` : right;
+    if (right) {
+      // OCR often tacks stray noise onto this line (a misread icon, a
+      // trailing character or two) — if the right side is otherwise just a
+      // bare store number, don't let that noise stop it from being treated
+      // as one (e.g. "948 Xx" should still become "Liquor Barn #948", not
+      // literally "948 Xx").
+      const bareNumber = right.match(/^(\d+)(?:\s+\S{1,3})?$/);
+      siteName = bareNumber ? `${left} #${bareNumber[1]}` : right;
+    }
   }
 
   // Address: a "City, ST[ ZIP]" line. The street address line isn't always
