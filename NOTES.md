@@ -1189,3 +1189,68 @@ fields. `tsc -b` and `vite build` both pass clean.
   out in full rather than abbreviate it (a deliberate, safety-motivated
   choice, not an oversight) — worth revisiting only if a genuinely
   reliable way to disambiguate table columns from OCR text turns up.
+
+---
+
+## 2026-09-26 (yet again) — Same Heatcraft plate, real scan this time: zero fields found
+
+Ed scanned the exact same Heatcraft condensing unit nameplate from the
+entry above for real (New Equipment, under an existing customer, photo
+picked from his library) — and got nothing at all, not even a partial
+read. This is the first real Tesseract pass on this plate; everything in
+the entry above was verified only by hand-transcribing "clean" text and
+running it through the regex directly, never real OCR output, so it
+couldn't have caught this.
+
+Ed sent the actual photo. Looked at it directly: it's a full nameplate
+occupying maybe a third of a much larger, heavily textured gray metal
+panel — visible cracks/crazing across the whole panel surface, peeling
+sticker edges, other stickers and a QR code nearby. The label itself is
+also a 3-column table layout (VOLTS/PHASE/HERTZ | MIN. CIRC. AMPACITY |
+MAX. OVERCURRENT...) sitting side by side in one row, not stacked — a
+harder shape for Tesseract's default automatic page-segmentation mode
+(it tries to lay out the *entire* photo as a page, and a large expanse of
+cracked/textured metal can easily get mistaken for text-like blocks, or
+scramble which column's numbers land next to which label in the reading
+order). Couldn't verify the actual raw OCR output directly (still no
+CDN access from this sandbox, and this session's build never got a
+chance to prompt Ed for the raw-text toggle before he sent the photo
+instead), so this is a real, well-documented failure mode being applied
+here, not a confirmed root cause — flagged as such below.
+
+**Fix applied**: `runOcr()` (`src/lib/ocr.ts`) now takes a `mode`
+parameter — `'label'` sets Tesseract's page-segmentation mode to
+`PSM.SPARSE_TEXT`, which looks for text of any size scattered anywhere in
+the image instead of trying to lay the whole photo out as a structured
+page. Both nameplate scanners (`NameplateScanButton.tsx`,
+`NameplateScanner.tsx`) now pass `'label'`, since both photograph a small
+printed/etched label against a large, usually-cluttered equipment
+surface. The dispatch ticket scanner (`DispatchScan.tsx`) is left on the
+default (`'document'`, plain automatic mode) since it photographs a card
+that's mostly text edge-to-edge, a genuinely different shape where the
+existing default already works.
+
+**Verified**: `tsc -b` and `vite build` both pass clean; confirmed
+`tesseract.js@7`'s actual installed module exports `PSM.SPARSE_TEXT`
+(checked directly via `node -e "require('tesseract.js').PSM"`, not just
+assumed from memory/types). **Not verified**: whether this actually fixes
+this specific plate's real-world OCR read — still no way to run real
+Tesseract against a real photo from this sandbox. This is a legitimate,
+standard fix for "small label photographed against a large busy
+background" (sparse-text mode exists in Tesseract specifically for this),
+but it's not a confirmed diagnosis of this exact failure — the manufacturer
+name on this plate's title is also visibly cracked/broken in the photo, which
+could independently keep "HEATCRAFT" from being read at all regardless of
+segmentation mode.
+
+### To pick this back up next
+- **Real test needed**: Ed to re-scan this same nameplate photo (or a
+  fresh one) after this fix ships, and check "Show raw scanned text" this
+  time if it still doesn't fill fields — that raw text is the one thing
+  that would let a future session actually see what Tesseract produced
+  instead of guessing at fixes blind. If it's still garbled, the next
+  step is tuning `nameplateOcr.ts`'s patterns against that real raw text,
+  not another blind segmentation-mode guess.
+- Everything else from the entry above (the hierarchical Systems/
+  Components schema, still in progress as of this entry) is unrelated to
+  this fix and tracked separately.

@@ -61,7 +61,7 @@ export default function NameplateScanner({
       const img = await loadImage(picked);
       const canvas = preprocessImage(img, 180);
       setStatusText('Reading nameplate…');
-      const text = await runOcr(canvas);
+      const text = await runOcr(canvas, 'label');
       setRawText(text);
       const extracted = extractNameplateFields(text);
       setFields({
