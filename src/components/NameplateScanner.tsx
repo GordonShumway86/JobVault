@@ -3,8 +3,7 @@ import { db } from '../lib/db';
 import { saveRecord, makeId, logActivity } from '../lib/repo';
 import { getOwnerId } from '../auth/AuthContext';
 import { extractNameplateFields, type NameplateExtraction } from '../lib/nameplateOcr';
-import { isStaleChunkError } from '../lib/staleChunk';
-import { loadImage, preprocessImage, runOcr } from '../lib/ocr';
+import { loadImage, preprocessImage, runOcr, StaleChunkImportError } from '../lib/ocr';
 import type { Equipment } from '../types';
 import { Field, TextInput } from './Field';
 
@@ -77,7 +76,7 @@ export default function NameplateScanner({
       });
       setStage('review');
     } catch (err) {
-      if (isStaleChunkError(err)) {
+      if (err instanceof StaleChunkImportError) {
         setStatusText('Update found — reloading…');
         window.location.reload();
         return;

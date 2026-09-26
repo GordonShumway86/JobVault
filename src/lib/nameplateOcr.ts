@@ -3,6 +3,16 @@
 // a recognizable label is found nearby, never guesses from noise. Modeled
 // on the same "look for MODEL:/S/N: style labels" approach as
 // Model-Photo-to-Manual-Lookup, extended to more fields.
+//
+// Real nameplates vary a lot in layout. Some print values inline right
+// after an abbreviated label ("MCA 30.4", "208/230V"). Others — commercial
+// refrigeration condensing units especially — spell labels out in full and
+// lay them out as a table: a row of headers ("VOLTS PHASE HERTZ", "MIN.
+// CIRC. AMPACITY") with the actual values in a separate row or a few words
+// later, sometimes with an unrelated number (a wire temperature rating, a
+// weight) sitting in between. The functions below try the simple inline
+// form first and only fall back to the table-aware search when that finds
+// nothing, so cleaner nameplates aren't affected.
 
 export interface NameplateExtraction {
   manufacturer: string | null;
@@ -25,7 +35,7 @@ const KNOWN_MANUFACTURERS = [
 const KNOWN_REFRIGERANTS = [
   'R-410A', 'R410A', 'R-22', 'R22', 'R-134A', 'R134A', 'R-404A', 'R404A',
   'R-407C', 'R407C', 'R-454B', 'R454B', 'R-32', 'R32', 'R-448A', 'R448A',
-  'R-449A', 'R449A',
+  'R-449A', 'R449A', 'R-507', 'R507',
 ];
 
 function firstMatch(text: string, patterns: RegExp[]): string | null {
@@ -34,6 +44,35 @@ function firstMatch(text: string, patterns: RegExp[]): string | null {
     if (m?.[1]) return m[1].trim();
   }
   return null;
+}
+
+// Refrigeration nameplates often print the bare code with no "R-"/"R"
+// prefix at all (e.g. a dual-refrigerant condensing unit rated
+// "404A/507"). Only look for that shape near the word REFRIGERANT, so a
+// stray number elsewhere on the plate (an amp rating, a weight) doesn't
+// get mistaken for one — and require a letter suffix or a slash pair so a
+// plain 2-3 digit number isn't treated as a refrigerant code either.
+function findRefrigerant(text: string): string | null {
+  const known = KNOWN_REFRIGERANTS.find((r) => text.includes(r));
+  if (known) return known;
+  const idx = text.indexOf('REFRIGERANT');
+  if (idx === -1) return null;
+  const window = text.slice(idx, idx + 120);
+  const m = window.match(/\b(\d{3}[A-Z](?:\/\d{2,3}[A-Z]?)?)\b/);
+  return m ? m[1] : null;
+}
+
+// Fallback for nameplates that print "VOLTS PHASE HERTZ" as a table header
+// with the actual values in the row below, instead of inline like "230V"
+// or "3PH" — the value row is a voltage (possibly a dash range), then a
+// single-digit phase, then a two-digit hertz reading, in that order.
+function findVoltagePhaseFromHeaderRow(text: string): { voltage: string | null; phase: string | null } {
+  const headerRe = /VOLTS\s+PHASE\s+HERTZ/;
+  const m = headerRe.exec(text);
+  if (!m) return { voltage: null, phase: null };
+  const after = text.slice(m.index + m[0].length, m.index + m[0].length + 200);
+  const row = after.match(/(\d{2,3}(?:-\d{2,3})?)\s+(\d)\s+\d{2}\b/);
+  return row ? { voltage: row[1], phase: row[2] } : { voltage: null, phase: null };
 }
 
 export function extractNameplateFields(rawText: string): NameplateExtraction {
@@ -49,23 +88,29 @@ export function extractNameplateFields(rawText: string): NameplateExtraction {
     /(?:SERIAL|SER|S\/N)[\s.:#-]*(?:NO\.?|NUMBER)?[\s.:#-]*([A-Z0-9/-]{4,30})/,
   ]);
 
-  const refrigerant_type = KNOWN_REFRIGERANTS.find((r) => text.includes(r)) ?? null;
+  const refrigerant_type = findRefrigerant(text);
 
-  const voltage = firstMatch(text, [
-    /(\d{2,3}(?:\/\d{2,3})?)\s?V(?:OLTS?)?\b/,
-  ]);
+  // \b before the digits matters here: without it, this can match the
+  // tail end of an unrelated alphanumeric run right before a "VOLTS"
+  // header elsewhere on the plate (e.g. the last 3 digits of a serial
+  // number like "...T16J11397 VOLTS PHASE HERTZ...").
+  let voltage = firstMatch(text, [/\b(\d{2,3}(?:\/\d{2,3})?)\s?V(?:OLTS?)?\b/]);
+  let phase = firstMatch(text, [/\b(\d)\s?(?:PH|PHASE|~)\b/]);
+  if (!voltage || !phase) {
+    const fromHeader = findVoltagePhaseFromHeaderRow(text);
+    voltage = voltage ?? fromHeader.voltage;
+    phase = phase ?? fromHeader.phase;
+  }
 
-  const phase = firstMatch(text, [
-    /(\d)\s?(?:PH|PHASE|~)\b/,
-  ]);
-
-  const mca = firstMatch(text, [
-    /MCA[\s.:#-]*(\d+(?:\.\d+)?)/,
-  ]);
-
-  const mocp = firstMatch(text, [
-    /M(?:OCP|OP|FS)[\s.:#-]*(\d+(?:\.\d+)?)/,
-  ]);
+  // MCA/MOCP are safety-critical (wire and breaker sizing) — only trust the
+  // abbreviated inline form ("MCA 30.4"). A nameplate that spells the label
+  // out in full ("MIN. CIRC. AMPACITY") usually lays it out as a multi-
+  // column table, where a "closest number after the label" guess can just
+  // as easily land on a different column's value — a confidently wrong
+  // number here is worse than leaving it blank for a tech to read off the
+  // actual plate.
+  const mca = firstMatch(text, [/MCA[\s.:#-]*(\d+(?:\.\d+)?)/]);
+  const mocp = firstMatch(text, [/M(?:OCP|OP|FS)[\s.:#-]*(\d+(?:\.\d+)?)/]);
 
   return {
     manufacturer,

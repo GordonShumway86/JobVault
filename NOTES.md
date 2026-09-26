@@ -1095,3 +1095,97 @@ since it reuses the same OCR pipeline, but worth a first real check.
   option he actually needs, or have wording he'd phrase differently —
   these are free-text-escapable ("Other") but worth tightening if a
   whole category of gear is missing a common real-world type.
+
+**Update**: deployed (fast-forward into `claude/service-log-hvac-app-ssx82g`,
+confirmed via the Vercel MCP connector that `job-vault-six-mu.vercel.app`
+rebuilt fresh and now aliases to it). Live as of this entry.
+
+---
+
+## 2026-09-26 (later again) — First real nameplate scan: "did not upload any information"
+
+Ed's first real on-device test — a Heatcraft refrigeration condensing
+unit nameplate (a photo of the actual plate, shared in chat) — came back
+with nothing filled in. Investigated by transcribing the real nameplate's
+text by hand (this sandbox still can't reach the Tesseract CDN to run
+real OCR, so worked from the actual label content) and running it through
+`extractNameplateFields`. Found three real, distinct problems, not one:
+
+1. **The regex logic only understood one nameplate layout.** All the
+   previous testing/tuning was against split-system/RTU-style nameplates
+   that print labels and values inline ("MCA 21.5", "230V", "1PH"). This
+   Heatcraft plate — a commercial refrigeration condensing unit — spells
+   every label out in full and lays it out as a table (a header row like
+   "VOLTS PHASE HERTZ" with the actual numbers in a separate row below).
+   None of `voltage`/`phase`/`mca`/`mocp`'s old patterns could ever match
+   that shape, regardless of how clean the OCR read was. Added a
+   table-aware fallback for voltage/phase (finds the "VOLTS PHASE HERTZ"
+   header, then reads the next number/number/number row after it) and a
+   fallback for refrigerant type (this plate's refrigerant codes,
+   "404A/507" and "22", have no "R-" prefix at all — added a bare-code
+   match scoped near the word "REFRIGERANT" so it can't misfire on an
+   unrelated number elsewhere on the plate).
+2. **Deliberately did NOT add an equivalent fallback for MCA/MOCP.**
+   Tried one (search forward from the spelled-out label for the first
+   number), but this plate's 3-column table layout means a different
+   column's data can legitimately land right after another column's
+   label in OCR's reading order — confirmed this by testing: it returned
+   "200" (the voltage) as both MCA and MOCP, silently wrong. Since MCA/
+   MOCP set wire and breaker sizing, a confidently-wrong number here is a
+   real safety hazard, worse than leaving it blank — reverted to only
+   trusting the abbreviated inline form for these two, same as before.
+   Ed will still need to read those two off the plate by hand on
+   nameplates that spell them out in full; the app now says so explicitly
+   instead of silently returning nothing with no explanation.
+3. **A real bug, found only by testing the actual serial number against
+   the actual next line of text on this plate**: the voltage regex had no
+   word-boundary check, so `...T16J11397 VOLTS PHASE HERTZ...` matched
+   "397" (the tail of the serial number) as if it were a voltage, because
+   "397" sits directly before "VOLTS" once OCR's line breaks collapse to
+   spaces. Fixed by requiring a proper token boundary before the digits.
+4. **No visibility into what happened.** `NameplateScanButton.tsx` (the
+   new New Equipment scan button) had no "show raw scanned text" toggle
+   unlike the older scanners, and no explicit message when zero fields
+   were found — so "it scanned but found nothing" and "it silently
+   failed" looked identical to Ed. Added a raw-text toggle, a
+   "filled in N of 8 fields" status message, and an explicit message
+   when nothing was found, with a nudge to check the raw text.
+5. **Hardening, not directly implicated here but a latent risk from the
+   stale-chunk-reload fix earlier today**: `isStaleChunkError` was being
+   checked against the *entire* OCR pipeline's errors, including failures
+   from inside Tesseract's own loading/recognition — which could
+   plausibly throw similar-sounding "failed to fetch" wording for a
+   genuine, unrelated problem (its own CDN load failing, a real OCR
+   error). That would have silently reloaded the page over a real failure
+   instead of showing it. Narrowed: `runOcr()` (`src/lib/ocr.ts`) now only
+   raises a distinct `StaleChunkImportError` for a failure of the app's
+   *own* `import('tesseract.js')` call specifically; everything past that
+   point falls through to the normal "could not read the photo" message.
+   Not confirmed as the actual cause here (items 1–3 above are sufficient
+   explanation on their own), but a real latent bug worth closing either
+   way.
+
+Verified all of the above by hand-transcribing this exact real nameplate's
+text and running it through the updated extraction function directly
+(node, not a real OCR pass) — now correctly pulls manufacturer, model #,
+serial #, refrigerant type, voltage, and phase from it; MCA/MOCP correctly
+stay blank with the new messaging explaining why, rather than a silently
+empty scan. Also re-ran a simple inline-style nameplate through it to
+confirm the fallbacks didn't regress the common case — still gets all 8
+fields. `tsc -b` and `vite build` both pass clean.
+
+### To pick this back up next
+- Not yet deployed — sitting on `claude/review-notes-app-build-bkvmc1`.
+- Still no way to verify real Tesseract OCR quality from this sandbox —
+  everything above was verified against hand-transcribed "what the OCR
+  should read if it reads the plate cleanly" text, not an actual OCR
+  pass. Ed's next real scan (same plate or a different one) is the real
+  test — if the label's real OCR output looks meaningfully different from
+  a clean transcription (mis-read characters, garbled words), the regexes
+  may need another round of tuning against the real raw text, which is
+  now visible via the new "Show raw scanned text" toggle if it comes to
+  that.
+- MCA/MOCP will stay manual-entry-only on nameplates that spell the label
+  out in full rather than abbreviate it (a deliberate, safety-motivated
+  choice, not an oversight) — worth revisiting only if a genuinely
+  reliable way to disambiguate table columns from OCR text turns up.

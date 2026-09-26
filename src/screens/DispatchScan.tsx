@@ -3,8 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { saveRecord, makeId } from '../lib/repo';
 import { getOwnerId } from '../auth/AuthContext';
 import { extractDispatchFields, type DispatchExtraction } from '../lib/dispatchOcr';
-import { isStaleChunkError } from '../lib/staleChunk';
-import { loadImage, preprocessImage, runOcr } from '../lib/ocr';
+import { loadImage, preprocessImage, runOcr, StaleChunkImportError } from '../lib/ocr';
 import TopBar from '../components/TopBar';
 import { Field, TextInput, TextArea } from '../components/Field';
 
@@ -54,7 +53,7 @@ export default function DispatchScan() {
       setFields(extractDispatchFields(text));
       setStage('review');
     } catch (err) {
-      if (isStaleChunkError(err)) {
+      if (err instanceof StaleChunkImportError) {
         setStatusText('Update found — reloading…');
         window.location.reload();
         return;
