@@ -8,11 +8,11 @@ const FIELD_LABELS: Record<keyof NameplateExtraction, string> = {
 };
 
 // A lighter-weight nameplate scan than NameplateScanner.tsx: no job/photo
-// attachment involved (there's no job yet while an Equipment record is
+// attachment involved (there's no job yet while a System/Component is
 // first being created from a Site), it just runs the same OCR + extraction
 // and hands the guesses back to whatever form is already on screen — the
 // form's own fields ARE the review step, so there's no separate review
-// screen here.
+// screen here. Used once per Component on the System form.
 export default function NameplateScanButton({
   onExtracted,
 }: {
@@ -39,7 +39,7 @@ export default function NameplateScanButton({
       const img = await loadImage(picked);
       const canvas = preprocessImage(img, 180);
       setStatusText('Reading nameplate…');
-      const text = await runOcr(canvas);
+      const text = await runOcr(canvas, 'label');
       setRawText(text);
       const extracted = extractNameplateFields(text);
       onExtracted(extracted);

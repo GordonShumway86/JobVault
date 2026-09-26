@@ -1,6 +1,6 @@
 import Dexie, { type Table } from 'dexie';
 import type {
-  Customer, Site, Equipment, Job, JobActivity, JobAttachment,
+  Customer, Site, System, Component, Job, JobActivity, JobAttachment,
   Part, Quote, QuoteLineItem, VendorDocument, DiagnosticReading, FollowUpTask, UserSettings,
 } from '../types';
 
@@ -35,7 +35,8 @@ export interface FormDraft {
 class ServiceLogDB extends Dexie {
   customers!: Table<Customer, string>;
   sites!: Table<Site, string>;
-  equipment!: Table<Equipment, string>;
+  systems!: Table<System, string>;
+  components!: Table<Component, string>;
   jobs!: Table<Job, string>;
   job_activity!: Table<JobActivity, string>;
   job_attachments!: Table<JobAttachment, string>;
@@ -75,7 +76,82 @@ class ServiceLogDB extends Dexie {
     this.version(2).stores({
       form_drafts: 'id, updated_at',
     });
+    // v3: flat `equipment` -> hierarchical `systems` + `components` (see
+    // supabase/migrations/0007_systems_components.sql for the server-side
+    // half of this). Every existing local `equipment` row becomes a System
+    // with zero components, using the same category/system_type mapping as
+    // the SQL migration so a device that's been offline for a while (and
+    // still has old cached `equipment` rows) converts the same way a fresh
+    // pull from Supabase would.
+    // Dexie applies an object-store deletion as soon as this version's
+    // schema diff runs, before its own .upgrade() callback executes — so
+    // `equipment` can't be dropped in the same version whose .upgrade()
+    // still needs to read it. Keep it present here (untouched) and drop it
+    // in v4 instead, once the copy below has already run.
+    this.version(3).stores({
+      systems: 'id, site_id, status, updated_at',
+      components: 'id, system_id, updated_at',
+      jobs: 'id, job_number, customer_id, site_id, system_id, status, created_at, updated_at',
+      job_attachments: 'id, job_id, system_id, category, created_at',
+      parts: 'id, job_id, system_id, status, updated_at',
+      diagnostic_readings: 'id, job_id, system_id, created_at',
+    }).upgrade(async (tx) => {
+      const oldEquipment = await tx.table('equipment').toArray();
+      if (oldEquipment.length) {
+        await tx.table('systems').bulkAdd(oldEquipment.map(mapLegacyEquipmentToSystem));
+      }
+      for (const table of ['jobs', 'job_attachments', 'parts', 'diagnostic_readings']) {
+        await tx.table(table).toCollection().modify((record: any) => {
+          record.system_id = record.equipment_id ?? null;
+          delete record.equipment_id;
+        });
+      }
+    });
+    // v4: now that every old `equipment` row has been copied into `systems`
+    // (v3's upgrade, above), the old store can finally be dropped.
+    this.version(4).stores({
+      equipment: null,
+    });
   }
+}
+
+const LEGACY_CATEGORY_TO_SYSTEM_CATEGORY: Record<string, string> = {
+  split_system: 'split_system', heat_pump: 'split_system', furnace: 'split_system', air_handler: 'split_system',
+  package_unit: 'packaged_unit', rtu: 'packaged_unit',
+  walk_in_cooler: 'commercial_refrigeration', walk_in_freezer: 'commercial_refrigeration', reach_in: 'commercial_refrigeration',
+  mini_split: 'ductless_vrf',
+  boiler: 'hydronics_plant', water_heater: 'hydronics_plant', make_up_air_unit: 'hydronics_plant',
+};
+
+const LEGACY_CATEGORY_LABELS: Record<string, string> = {
+  split_system: 'Split System', package_unit: 'Package Unit', rtu: 'RTU', heat_pump: 'Heat Pump',
+  furnace: 'Furnace', air_handler: 'Air Handler', walk_in_cooler: 'Walk-In Cooler', walk_in_freezer: 'Walk-In Freezer',
+  reach_in: 'Reach-In', ice_machine: 'Ice Machine', exhaust_fan: 'Exhaust Fan', make_up_air_unit: 'Make-Up Air Unit',
+  mini_split: 'Mini-Split', boiler: 'Boiler', water_heater: 'Water Heater', other: 'Other',
+};
+
+// Mirrors the `case`/`coalesce` logic in supabase/migrations/0007_systems_
+// components.sql exactly, so a local upgrade and a fresh server pull always
+// produce the same System for the same old equipment row.
+export function mapLegacyEquipmentToSystem(e: any) {
+  const positionPrefix = e.unit_position === 'outdoor' ? 'Outdoor Unit — ' : e.unit_position === 'indoor' ? 'Indoor Unit — ' : '';
+  const typeBase = (e.subtype && e.subtype.trim()) || LEGACY_CATEGORY_LABELS[e.category] || 'Other';
+  return {
+    id: e.id, owner_id: e.owner_id, site_id: e.site_id,
+    category: LEGACY_CATEGORY_TO_SYSTEM_CATEGORY[e.category] ?? 'other',
+    system_type: `${positionPrefix}${typeBase}`.trim(),
+    configuration: null,
+    nickname: e.nickname ?? null, location_at_site: e.location_at_site ?? null,
+    installed_date: e.installed_date ?? null, system_notes: e.equipment_notes ?? null,
+    status: e.status ?? 'active',
+    legacy_manufacturer: e.manufacturer ?? null, legacy_model_number: e.model_number ?? null,
+    legacy_serial_number: e.serial_number ?? null, legacy_manufacture_date: e.manufacture_date ?? null,
+    legacy_refrigerant_type: e.refrigerant_type ?? null, legacy_nominal_capacity: e.nominal_capacity ?? null,
+    legacy_voltage: e.voltage ?? null, legacy_phase: e.phase ?? null, legacy_mca: e.mca ?? null, legacy_mocp: e.mocp ?? null,
+    legacy_compressor_model: e.compressor_model ?? null, legacy_filter_sizes: e.filter_sizes ?? null,
+    legacy_belt_sizes: e.belt_sizes ?? null, legacy_warranty_notes: e.warranty_notes ?? null,
+    created_at: e.created_at, updated_at: e.updated_at,
+  };
 }
 
 export const db = new ServiceLogDB();

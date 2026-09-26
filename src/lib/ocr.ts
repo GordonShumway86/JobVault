@@ -35,7 +35,18 @@ export function preprocessImage(img: HTMLImageElement, contrastPct = 150): HTMLC
   return canvas;
 }
 
-export async function runOcr(canvas: HTMLCanvasElement): Promise<string> {
+// 'label' is for a small printed/etched nameplate photographed as part of a
+// much larger, visually noisy background (the rest of the equipment
+// cabinet — scratches, cracks, screws, other stickers) — Tesseract's
+// default automatic page segmentation tries to lay the whole image out as
+// a page and can mistake that background texture for text blocks, or
+// scramble a multi-column label into the wrong reading order. Sparse-text
+// mode instead looks for text of any size anywhere in the image, which
+// reads a small label surrounded by blank metal far more reliably.
+// 'document' (the default) is for a photo that's mostly text edge-to-edge
+// (a dispatch ticket/work order card) where the normal automatic mode
+// already works well.
+export async function runOcr(canvas: HTMLCanvasElement, mode: 'label' | 'document' = 'document'): Promise<string> {
   let tesseract: typeof import('tesseract.js');
   try {
     tesseract = await import('tesseract.js');
@@ -43,9 +54,12 @@ export async function runOcr(canvas: HTMLCanvasElement): Promise<string> {
     if (isStaleChunkError(err)) throw new StaleChunkImportError();
     throw err;
   }
-  const { createWorker } = tesseract;
+  const { createWorker, PSM } = tesseract;
   const worker = await createWorker('eng');
   try {
+    if (mode === 'label') {
+      await worker.setParameters({ tessedit_pageseg_mode: PSM.SPARSE_TEXT });
+    }
     const { data: { text } } = await worker.recognize(canvas);
     return text;
   } finally {

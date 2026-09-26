@@ -8,11 +8,11 @@ const CATEGORIES = Object.entries(PHOTO_CATEGORY_LABELS) as [PhotoCategory, stri
 
 export default function PhotoUploader({
   jobId,
-  equipmentId,
+  systemId,
   onAdded,
 }: {
   jobId: string;
-  equipmentId?: string | null;
+  systemId?: string | null;
   onAdded?: () => void;
 }) {
   const cameraInput = useRef<HTMLInputElement>(null);
@@ -48,7 +48,7 @@ export default function PhotoUploader({
       id,
       owner_id: ownerId,
       job_id: jobId,
-      equipment_id: equipmentId ?? null,
+      system_id: systemId ?? null,
       storage_path: `pending/${id}`, // replaced with real path once uploaded
       thumbnail_path: null,
       file_type: pendingFile.type,

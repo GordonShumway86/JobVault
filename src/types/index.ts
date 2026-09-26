@@ -3,12 +3,12 @@
 
 export type CustomerType = 'residential' | 'commercial' | 'property_management' | 'contractor' | 'other';
 
-export type EquipmentCategory =
-  | 'split_system' | 'package_unit' | 'rtu' | 'heat_pump' | 'furnace' | 'air_handler'
-  | 'walk_in_cooler' | 'walk_in_freezer' | 'reach_in' | 'ice_machine' | 'exhaust_fan'
-  | 'make_up_air_unit' | 'mini_split' | 'boiler' | 'water_heater' | 'other';
+export type SystemCategory =
+  | 'commercial_refrigeration' | 'split_system' | 'packaged_unit' | 'ductless_vrf' | 'hydronics_plant' | 'other';
 
-export type EquipmentStatus = 'active' | 'replaced' | 'removed' | 'inactive';
+export type SystemStatus = 'active' | 'replaced' | 'removed' | 'inactive';
+
+export type ComponentPosition = 'outdoor' | 'indoor';
 
 export type CallType =
   | 'service_diagnostic' | 'preventive_maintenance' | 'repair' | 'quote_estimate'
@@ -78,34 +78,65 @@ export interface Site {
   updated_at: string;
 }
 
-export type UnitPosition = 'outdoor' | 'indoor';
-
-export interface Equipment {
+// A System is the top-level unit at a site (e.g. "Walk-in Cooler," "Split
+// System #4," "Packaged RTU #2"). It has no nameplate of its own — that
+// detail lives on its Components (see below) — but keeps a handful of
+// legacy nameplate-shaped columns purely so rows migrated from the old flat
+// `equipment` table (supabase/migrations/0007_systems_components.sql) don't
+// lose data: those columns are populated only for migrated rows and are
+// never written to by the current System-creation UI.
+export interface System {
   id: string;
   owner_id: string;
   site_id: string;
-  category: EquipmentCategory;
-  unit_position: UnitPosition | null;
-  subtype: string | null;
+  category: SystemCategory;
+  system_type: string;
+  configuration: string | null; // split systems only: Single-stage/Multi-stage/Dual-Fuel/Twinned
   nickname: string | null;
   location_at_site: string | null;
+  installed_date: string | null;
+  system_notes: string | null;
+  status: SystemStatus;
+  // Legacy nameplate fields, populated only by the 0007 migration for rows
+  // converted from the old `equipment` table (which had no components) —
+  // left null for every System created going forward.
+  legacy_manufacturer: string | null;
+  legacy_model_number: string | null;
+  legacy_serial_number: string | null;
+  legacy_manufacture_date: string | null;
+  legacy_refrigerant_type: string | null;
+  legacy_nominal_capacity: string | null;
+  legacy_voltage: string | null;
+  legacy_phase: string | null;
+  legacy_mca: string | null;
+  legacy_mocp: string | null;
+  legacy_compressor_model: string | null;
+  legacy_filter_sizes: string | null;
+  legacy_belt_sizes: string | null;
+  legacy_warranty_notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// A Component is a physical part of a System with its own nameplate (e.g.
+// "Condensing Unit #1," "Evaporator Coil," "Furnace," "VAV Box #3"). A
+// System can have any number of them, added one at a time via "Add Another
+// Component" on the System form.
+export interface Component {
+  id: string;
+  owner_id: string;
+  system_id: string;
+  position: ComponentPosition | null; // split systems / ductless-VRF only
+  component_type: string;
+  name: string | null;
   manufacturer: string | null;
   model_number: string | null;
   serial_number: string | null;
-  manufacture_date: string | null;
   refrigerant_type: string | null;
-  nominal_capacity: string | null;
   voltage: string | null;
   phase: string | null;
   mca: string | null;
   mocp: string | null;
-  compressor_model: string | null;
-  filter_sizes: string | null;
-  belt_sizes: string | null;
-  warranty_notes: string | null;
-  installed_date: string | null;
-  equipment_notes: string | null;
-  status: EquipmentStatus;
   created_at: string;
   updated_at: string;
 }
@@ -118,7 +149,7 @@ export interface Job {
   dispatch_number: string | null;
   customer_id: string;
   site_id: string;
-  equipment_id: string | null;
+  system_id: string | null;
   call_type: CallType;
   status: JobStatus;
   priority: JobPriority;
@@ -154,7 +185,7 @@ export interface JobAttachment {
   id: string;
   owner_id: string;
   job_id: string;
-  equipment_id: string | null;
+  system_id: string | null;
   storage_path: string;
   thumbnail_path: string | null;
   file_type: string | null;
@@ -173,7 +204,7 @@ export interface Part {
   id: string;
   owner_id: string;
   job_id: string;
-  equipment_id: string | null;
+  system_id: string | null;
   manufacturer: string | null;
   part_number: string | null;
   description: string | null;
@@ -252,7 +283,7 @@ export interface DiagnosticReading {
   id: string;
   owner_id: string;
   job_id: string;
-  equipment_id: string | null;
+  system_id: string | null;
   category: ReadingCategory;
   refrigerant: string | null;
   suction_pressure: number | null;
@@ -354,140 +385,92 @@ export const CALL_TYPE_LABELS: Record<CallType, string> = {
   other: 'Other',
 };
 
-export const EQUIPMENT_CATEGORY_LABELS: Record<EquipmentCategory, string> = {
+export const SYSTEM_CATEGORY_LABELS: Record<SystemCategory, string> = {
+  commercial_refrigeration: 'Commercial Refrigeration',
   split_system: 'Split System',
-  package_unit: 'Package Unit',
-  rtu: 'RTU',
-  heat_pump: 'Heat Pump',
-  furnace: 'Furnace',
-  air_handler: 'Air Handler',
-  walk_in_cooler: 'Walk-In Cooler',
-  walk_in_freezer: 'Walk-In Freezer',
-  reach_in: 'Reach-In',
-  ice_machine: 'Ice Machine',
-  exhaust_fan: 'Exhaust Fan',
-  make_up_air_unit: 'Make-Up Air Unit',
-  mini_split: 'Mini-Split',
-  boiler: 'Boiler',
-  water_heater: 'Water Heater',
+  packaged_unit: 'Packaged Unit / RTU',
+  ductless_vrf: 'Ductless / VRF',
+  hydronics_plant: 'Hydronics / Plant',
   other: 'Other',
 };
 
-// Split systems have two physical units, each with its own nameplate — the
-// subtype choices genuinely differ depending on which one this record is.
-export const SPLIT_SYSTEM_SUBTYPES: Record<UnitPosition, string[]> = {
-  outdoor: [
-    'Air Conditioner Condenser',
-    'Heat Pump Condenser',
-    'Dual Fuel Condenser (paired with gas furnace)',
-    'Refrigeration Condensing Unit',
+// The System Type dropdown's preset options per category — "Other (type
+// below)" is always appended in the UI on top of these, so nothing Ed runs
+// into in the field is ever a dead end. `other` has no preset list.
+export const SYSTEM_TYPE_OPTIONS: Record<SystemCategory, string[]> = {
+  commercial_refrigeration: [
+    'Walk-in Cooler',
+    'Walk-in Freezer',
+    'Reach-in Cooler',
+    'Reach-in Freezer',
   ],
-  indoor: [
-    'Gas Furnace',
-    'Electric Furnace',
-    'Oil Furnace',
-    'Air Handler (Electric Heat Strip)',
-    'Air Handler (Cooling Only, No Heat)',
-    'Air Handler (Hydronic Coil)',
-    'Evaporator Coil',
+  split_system: ['Split System'],
+  packaged_unit: [
+    'Packaged RTU',
+    'Packaged Gas/Electric',
+    'Packaged Heat Pump',
+    'Packaged Dual-Fuel',
   ],
+  ductless_vrf: ['Mini-Split', 'VRF/VRV System'],
+  hydronics_plant: [
+    'Chiller (Air-Cooled)',
+    'Chiller (Water-Cooled)',
+    'Boiler (Gas)',
+    'Boiler (Electric)',
+    'Boiler (Oil)',
+    'Air Handler (AHU)',
+    'Makeup Air Unit (MAU)',
+  ],
+  other: [],
 };
 
-// A more specific type within a category — e.g. "Package Unit" alone
-// doesn't say gas/electric vs. heat pump vs. straight cool. `split_system`
-// isn't here since it's handled separately (see SPLIT_SYSTEM_SUBTYPES);
-// `other` has no preset list. Free text (an "Other" option in the UI) is
-// always available for anything not listed here.
-export const EQUIPMENT_SUBTYPE_OPTIONS: Partial<Record<EquipmentCategory, string[]>> = {
-  package_unit: [
-    'Gas/Electric (Gas Heat, Electric Cool)',
-    'Heat Pump (Electric Heat & Cool)',
-    'Straight Cool (No Heat)',
-    'All Electric (Electric Heat Strip)',
-    'Dual Fuel (Gas Heat + Heat Pump)',
-  ],
-  rtu: [
-    'Gas/Electric (Gas Heat, Electric Cool)',
-    'Heat Pump (Electric Heat & Cool)',
-    'Straight Cool (No Heat)',
-    'All Electric (Electric Heat Strip)',
-    'Dual Fuel (Gas Heat + Heat Pump)',
-  ],
-  heat_pump: [
-    'Air-Source Split System',
-    'Air-Source Package Unit',
-    'Ductless Mini-Split',
-    'Geothermal / Water-Source',
-  ],
-  furnace: [
-    'Gas (Natural Gas)',
-    'Gas (Propane/LP)',
-    'Electric',
-    'Oil',
-  ],
-  air_handler: [
-    'Electric Heat Strip',
-    'Cooling Only (No Heat)',
-    'Hydronic Coil (Hot Water Heat)',
-  ],
-  walk_in_cooler: [
-    'Self-Contained',
-    'Remote Condensing Unit',
-    'Multiplex / Rack System',
-  ],
-  walk_in_freezer: [
-    'Self-Contained',
-    'Remote Condensing Unit',
-    'Multiplex / Rack System',
-  ],
-  reach_in: [
-    'Reach-In Cooler',
-    'Reach-In Freezer',
-    'Dual-Temp (Cooler/Freezer)',
-    'Prep Table / Sandwich Unit',
-    'Glass Door Merchandiser',
-  ],
-  ice_machine: [
-    'Modular Ice Head (Remote Bin)',
-    'Self-Contained Undercounter',
-    'Ice/Water Dispenser',
-    'Flake Ice Machine',
-    'Cube Ice Machine',
-  ],
-  exhaust_fan: [
-    'Roof Exhaust Fan — Belt-Drive (Upblast)',
-    'Roof Exhaust Fan — Direct-Drive (Upblast)',
-    'Downblast Exhaust Fan',
-    'Inline Duct Fan',
-    'Wall-Mounted Exhaust Fan',
-  ],
-  make_up_air_unit: [
-    'Heated — Gas-Fired Direct',
-    'Heated — Gas-Fired Indirect',
-    'Heated — Electric',
-    'Unheated / Ventilation Only',
-    'Heated & Cooled (Conditioned)',
-  ],
-  mini_split: [
-    'Single-Zone',
-    'Multi-Zone',
-    'Wall-Mounted Head',
-    'Ceiling Cassette',
-    'Ducted Concealed Unit',
-  ],
-  boiler: [
-    'Gas-Fired (Standard/Atmospheric)',
-    'Gas-Fired (High-Efficiency Condensing)',
-    'Electric',
-    'Combi (Heat + Domestic Hot Water)',
-  ],
-  water_heater: [
-    'Gas (Tank)',
-    'Electric (Tank)',
-    'Tankless — Gas',
-    'Tankless — Electric',
-    'Hybrid Heat Pump',
-  ],
+// Split systems only — a second classification alongside System Type,
+// describing how the indoor/outdoor units are staged/paired.
+export const SPLIT_SYSTEM_CONFIGURATIONS = ['Single-stage', 'Multi-stage', 'Dual-Fuel', 'Twinned'];
+
+// The Component Type choices a System's category allows, grouped by
+// position for the categories where indoor/outdoor units have genuinely
+// different component types (each with its own nameplate). A category not
+// listed here (or listed with `positioned: false`) doesn't ask for a
+// position at all — the Component Type list applies regardless of where the
+// part physically sits. `other` has no preset list. As with System Type,
+// "Other (type below)" is always appended in the UI.
+export interface ComponentTypeConfig {
+  positioned: boolean;
+  types: string[]; // used when !positioned
+  outdoorTypes: string[]; // used when positioned
+  indoorTypes: string[]; // used when positioned
+}
+
+export const COMPONENT_TYPE_OPTIONS: Record<SystemCategory, ComponentTypeConfig> = {
+  commercial_refrigeration: {
+    positioned: false,
+    types: ['Condensing Unit', 'Evaporator/Unit Cooler', 'Self-Contained Package'],
+    outdoorTypes: [], indoorTypes: [],
+  },
+  split_system: {
+    positioned: true,
+    types: [],
+    outdoorTypes: ['Air Conditioner Condenser', 'Heat Pump Condenser'],
+    indoorTypes: ['Gas Furnace', 'Electric Air Handler', 'Hydronic Air Handler', 'Water-Source Heat Pump', 'Evaporator Coil'],
+  },
+  packaged_unit: {
+    positioned: false,
+    types: ['VAV Box', 'CAV Box', 'Bypass Damper'],
+    outdoorTypes: [], indoorTypes: [],
+  },
+  ductless_vrf: {
+    positioned: true,
+    types: [],
+    outdoorTypes: ['VRF Heat Recovery Condenser', 'Heat Pump Condenser'],
+    indoorTypes: ['Wall Mount', 'Ceiling Cassette', 'Ducted Concealed', 'Floor Mount', 'BC Controller/Branch Selector'],
+  },
+  hydronics_plant: {
+    positioned: false,
+    types: ['Circulator Pump', 'Expansion Tank', 'Fluid Cooler', 'Cooling Tower'],
+    outdoorTypes: [], indoorTypes: [],
+  },
+  other: { positioned: false, types: [], outdoorTypes: [], indoorTypes: [] },
 };
 
 export const CUSTOMER_TYPE_LABELS: Record<CustomerType, string> = {
