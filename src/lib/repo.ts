@@ -8,7 +8,7 @@ import { getOwnerId } from '../auth/AuthContext';
 // one of these instead of talking to Supabase directly.
 
 type TableName =
-  | 'customers' | 'sites' | 'equipment' | 'jobs' | 'job_activity' | 'job_attachments'
+  | 'customers' | 'sites' | 'systems' | 'components' | 'jobs' | 'job_activity' | 'job_attachments'
   | 'parts' | 'quotes' | 'quote_line_items' | 'vendor_documents'
   | 'diagnostic_readings' | 'follow_up_tasks' | 'user_settings';
 
@@ -109,9 +109,13 @@ export async function deleteCustomerCascade(customerId: string) {
 
   const sites = await db.sites.where('customer_id').equals(customerId).toArray();
   for (const site of sites) {
-    const equipment = await db.equipment.where('site_id').equals(site.id).toArray();
-    await Promise.all(equipment.map((e) => db.equipment.delete(e.id)));
-    await purgeQueuedMutations('equipment', equipment.map((e) => e.id));
+    const systems = await db.systems.where('site_id').equals(site.id).toArray();
+    const systemIds = systems.map((s) => s.id);
+    const components = systemIds.length ? await db.components.where('system_id').anyOf(systemIds).toArray() : [];
+    await Promise.all(components.map((c) => db.components.delete(c.id)));
+    await purgeQueuedMutations('components', components.map((c) => c.id));
+    await Promise.all(systems.map((s) => db.systems.delete(s.id)));
+    await purgeQueuedMutations('systems', systemIds);
     await db.sites.delete(site.id);
   }
   await purgeQueuedMutations('sites', sites.map((s) => s.id));

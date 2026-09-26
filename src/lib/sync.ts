@@ -5,7 +5,7 @@ import { db } from './db';
 // pattern. job_attachments is handled separately because creating one also
 // means uploading a blob to Storage.
 const SYNCED_TABLES = [
-  'customers', 'sites', 'equipment', 'jobs', 'job_activity',
+  'customers', 'sites', 'systems', 'components', 'jobs', 'job_activity',
   'parts', 'quotes', 'quote_line_items', 'vendor_documents',
   'diagnostic_readings', 'follow_up_tasks', 'user_settings',
 ] as const;
