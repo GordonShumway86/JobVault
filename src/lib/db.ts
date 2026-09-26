@@ -124,7 +124,7 @@ const LEGACY_CATEGORY_LABELS: Record<string, string> = {
 // Mirrors the `case`/`coalesce` logic in supabase/migrations/0007_systems_
 // components.sql exactly, so a local upgrade and a fresh server pull always
 // produce the same System for the same old equipment row.
-function mapLegacyEquipmentToSystem(e: any) {
+export function mapLegacyEquipmentToSystem(e: any) {
   const positionPrefix = e.unit_position === 'outdoor' ? 'Outdoor Unit — ' : e.unit_position === 'indoor' ? 'Indoor Unit — ' : '';
   const typeBase = (e.subtype && e.subtype.trim()) || LEGACY_CATEGORY_LABELS[e.category] || 'Other';
   return {
