@@ -1509,3 +1509,82 @@ the building agent's own report). Found three real, distinct problems:
   cached `equipment` rows, are both still outstanding — everything above
   was verified with synthetic data through the real code paths, never a
   real phone.
+
+---
+
+## 2026-09-26 (still yet again) — Real raw OCR text finally in hand: model/serial were swapping with the wrong values
+
+Ed re-scanned the same Heatcraft nameplate on the deployed sparse-text-mode
+fix and this time got real text back — progress, since the previous scan
+got literally nothing. But the result was actively wrong, not just
+incomplete: "Model #" got filled with the word **"SERIAL"**, and "Serial #"
+got filled with **"89626301"** — a Part Number, not a serial number.
+
+Ed sent the actual raw OCR text this time (via "Show raw scanned text"),
+which finally made the real cause visible instead of guessed at:
+
+```
+PART NO.
+MODEL NO.
+SERIAL NO
+89626301 CZT050MECF
+T16J11397
+```
+
+This plate prints its three labels stacked with no value between them,
+then the three values as their own separate run right after. Collapsed to
+one line (how `extractNameplateFields` reads it), that's `...PART NO.
+MODEL NO. SERIAL NO 89626301 CZT050MECF T16J11397...` — so the old
+"label directly followed by its value" regexes did exactly what they're
+built to do and grabbed the *next word after the label*, which here is
+either another label (`MODEL NO.` → captured `SERIAL`) or a different
+column's value entirely (`SERIAL NO` → captured `89626301`, actually the
+Part Number). Not a bug in the matching logic so much as a layout the
+inline-style regexes were never going to handle correctly — same root
+category of problem as the earlier VOLTS/PHASE/HERTZ table-header fix, just
+a different pair of fields.
+
+**Fix** (`src/lib/nameplateOcr.ts`):
+1. `findModelSerialFromLabelBlock()` — detects the stacked-labels shape
+   (`MODEL NO. SERIAL NO.`, optionally preceded by `PART NO.`) and reads
+   the values positionally from the run of tokens right after: skip Part
+   No.'s value if present, then take the next two digit-containing tokens
+   as model, then serial, in that order. Used whenever the stacked shape
+   is detected, overriding the inline regexes rather than only filling
+   gaps, since the inline result is actively wrong in this shape, not just
+   missing.
+2. A small standing defense added either way: `rejectLabelWord()` throws
+   out a model/serial "match" that's actually just a label word (SERIAL,
+   MODEL, PART, NUMBER, NO, TYPE, VOLTS, PHASE, HERTZ, WEIGHT) — cheap
+   insurance against the same failure mode showing up in a shape not
+   explicitly handled yet.
+
+**Verified for real this time** — not hand-transcribed guesswork: bundled
+the actual `nameplateOcr.ts` module with esbuild and ran it directly
+against Ed's real raw OCR text (copy-pasted verbatim, cracked/garbled
+lines and all) in Node. Confirms `model_number: "CZT050MECF"` and
+`serial_number: "T16J11397"` — the real serial, correctly placed. (Tesseract
+itself still misreads a couple of characters in the model number, "050ME"
+vs. the plate's actual "069M6" — that's OCR character-recognition noise,
+not a labeling bug, and exactly why every scan still says to review each
+field before saving.) Also re-ran the previous clean/simple nameplate test
+cases through the same real module to confirm no regression — both still
+extract every field correctly.
+
+Voltage/phase/refrigerant/manufacturer came back blank on this real scan —
+checked the raw text and confirmed that's a genuine OCR-quality miss on
+this specific noisy capture (the manufacturer word is entirely absent from
+what Tesseract read, and the voltage/phase table row is too garbled to
+safely parse), not a regex bug to chase — blank is correct here, a wrong
+guess would be worse.
+
+`tsc -b` and `vite build` both pass clean.
+
+### To pick this back up next
+- Not yet deployed — needs the same PR-and-merge step as the last few
+  fixes.
+- Ed to re-scan and confirm model/serial land correctly this time — if
+  voltage/phase/manufacturer keep coming back blank on real scans (as
+  opposed to being wrong), that's expected given this photo's OCR quality,
+  not a bug — worth another look only if a *clean, well-lit* nameplate
+  photo still can't get those fields.
