@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
-import { loadImage, preprocessImage, runOcr, StaleChunkImportError } from '../lib/ocr';
+import { loadImage, preprocessImage, runOcr, StaleChunkImportError, type CropRect } from '../lib/ocr';
 import { extractNameplateFields, type NameplateExtraction } from '../lib/nameplateOcr';
+import ImageCropper from './ImageCropper';
 
 const FIELD_LABELS: Record<keyof NameplateExtraction, string> = {
   manufacturer: 'manufacturer', model_number: 'model #', serial_number: 'serial #',
@@ -20,6 +21,7 @@ export default function NameplateScanButton({
 }) {
   const cameraInput = useRef<HTMLInputElement>(null);
   const libraryInput = useRef<HTMLInputElement>(null);
+  const [pendingImg, setPendingImg] = useState<HTMLImageElement | null>(null);
   const [busy, setBusy] = useState(false);
   const [statusText, setStatusText] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -32,12 +34,22 @@ export default function NameplateScanButton({
     e.target.value = '';
     if (!picked) return;
     setError(null);
-    setBusy(true);
     setFoundCount(null);
+    setStatusText('');
+    try {
+      setPendingImg(await loadImage(picked));
+    } catch {
+      setError('Could not load that photo. You can still fill in the fields by hand.');
+    }
+  }
+
+  async function runScan(crop?: CropRect) {
+    const img = pendingImg;
+    if (!img) return;
+    setBusy(true);
     setStatusText('Loading OCR engine…');
     try {
-      const img = await loadImage(picked);
-      const canvas = preprocessImage(img, 180);
+      const canvas = preprocessImage(img, 180, crop);
       setStatusText('Reading nameplate…');
       const text = await runOcr(canvas, 'label');
       setRawText(text);
@@ -59,31 +71,38 @@ export default function NameplateScanButton({
       setError(err instanceof Error ? err.message : 'Could not read the photo. You can still fill in the fields by hand.');
     } finally {
       setBusy(false);
+      URL.revokeObjectURL(img.src);
+      setPendingImg(null);
     }
   }
 
   return (
     <div className="space-y-1.5">
-      <div className="flex gap-2">
-        <button
-          type="button"
-          onClick={() => cameraInput.current?.click()}
-          disabled={busy}
-          className="flex-1 rounded-lg bg-zinc-800 active:bg-zinc-700 text-white text-sm font-semibold py-3 disabled:opacity-40"
-        >
-          {busy ? 'Scanning…' : 'Scan Nameplate — Take Photo'}
-        </button>
-        <button
-          type="button"
-          onClick={() => libraryInput.current?.click()}
-          disabled={busy}
-          className="flex-1 rounded-lg bg-zinc-800 active:bg-zinc-700 text-white text-sm font-semibold py-3 disabled:opacity-40"
-        >
-          Choose from Library
-        </button>
-      </div>
+      {!pendingImg && (
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => cameraInput.current?.click()}
+            disabled={busy}
+            className="flex-1 rounded-lg bg-zinc-800 active:bg-zinc-700 text-white text-sm font-semibold py-3 disabled:opacity-40"
+          >
+            {busy ? 'Scanning…' : 'Scan Nameplate — Take Photo'}
+          </button>
+          <button
+            type="button"
+            onClick={() => libraryInput.current?.click()}
+            disabled={busy}
+            className="flex-1 rounded-lg bg-zinc-800 active:bg-zinc-700 text-white text-sm font-semibold py-3 disabled:opacity-40"
+          >
+            Choose from Library
+          </button>
+        </div>
+      )}
       <input ref={cameraInput} type="file" accept="image/*" capture="environment" className="hidden" onChange={onFilePicked} />
       <input ref={libraryInput} type="file" accept="image/*" className="hidden" onChange={onFilePicked} />
+      {pendingImg && !busy && (
+        <ImageCropper imageUrl={pendingImg.src} onConfirm={runScan} onSkip={() => runScan(undefined)} />
+      )}
       {statusText && !error && <div className="text-zinc-400 text-xs">{statusText}</div>}
       {error && <div className="text-red-400 text-xs">{error}</div>}
       {foundCount !== null && foundCount > 0 && !busy && (

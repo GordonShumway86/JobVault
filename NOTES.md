@@ -1509,3 +1509,160 @@ the building agent's own report). Found three real, distinct problems:
   cached `equipment` rows, are both still outstanding — everything above
   was verified with synthetic data through the real code paths, never a
   real phone.
+
+---
+
+## 2026-09-26 (still yet again) — Real raw OCR text finally in hand: model/serial were swapping with the wrong values
+
+Ed re-scanned the same Heatcraft nameplate on the deployed sparse-text-mode
+fix and this time got real text back — progress, since the previous scan
+got literally nothing. But the result was actively wrong, not just
+incomplete: "Model #" got filled with the word **"SERIAL"**, and "Serial #"
+got filled with **"89626301"** — a Part Number, not a serial number.
+
+Ed sent the actual raw OCR text this time (via "Show raw scanned text"),
+which finally made the real cause visible instead of guessed at:
+
+```
+PART NO.
+MODEL NO.
+SERIAL NO
+89626301 CZT050MECF
+T16J11397
+```
+
+This plate prints its three labels stacked with no value between them,
+then the three values as their own separate run right after. Collapsed to
+one line (how `extractNameplateFields` reads it), that's `...PART NO.
+MODEL NO. SERIAL NO 89626301 CZT050MECF T16J11397...` — so the old
+"label directly followed by its value" regexes did exactly what they're
+built to do and grabbed the *next word after the label*, which here is
+either another label (`MODEL NO.` → captured `SERIAL`) or a different
+column's value entirely (`SERIAL NO` → captured `89626301`, actually the
+Part Number). Not a bug in the matching logic so much as a layout the
+inline-style regexes were never going to handle correctly — same root
+category of problem as the earlier VOLTS/PHASE/HERTZ table-header fix, just
+a different pair of fields.
+
+**Fix** (`src/lib/nameplateOcr.ts`):
+1. `findModelSerialFromLabelBlock()` — detects the stacked-labels shape
+   (`MODEL NO. SERIAL NO.`, optionally preceded by `PART NO.`) and reads
+   the values positionally from the run of tokens right after: skip Part
+   No.'s value if present, then take the next two digit-containing tokens
+   as model, then serial, in that order. Used whenever the stacked shape
+   is detected, overriding the inline regexes rather than only filling
+   gaps, since the inline result is actively wrong in this shape, not just
+   missing.
+2. A small standing defense added either way: `rejectLabelWord()` throws
+   out a model/serial "match" that's actually just a label word (SERIAL,
+   MODEL, PART, NUMBER, NO, TYPE, VOLTS, PHASE, HERTZ, WEIGHT) — cheap
+   insurance against the same failure mode showing up in a shape not
+   explicitly handled yet.
+
+**Verified for real this time** — not hand-transcribed guesswork: bundled
+the actual `nameplateOcr.ts` module with esbuild and ran it directly
+against Ed's real raw OCR text (copy-pasted verbatim, cracked/garbled
+lines and all) in Node. Confirms `model_number: "CZT050MECF"` and
+`serial_number: "T16J11397"` — the real serial, correctly placed. (Tesseract
+itself still misreads a couple of characters in the model number, "050ME"
+vs. the plate's actual "069M6" — that's OCR character-recognition noise,
+not a labeling bug, and exactly why every scan still says to review each
+field before saving.) Also re-ran the previous clean/simple nameplate test
+cases through the same real module to confirm no regression — both still
+extract every field correctly.
+
+Voltage/phase/refrigerant/manufacturer came back blank on this real scan —
+checked the raw text and confirmed that's a genuine OCR-quality miss on
+this specific noisy capture (the manufacturer word is entirely absent from
+what Tesseract read, and the voltage/phase table row is too garbled to
+safely parse), not a regex bug to chase — blank is correct here, a wrong
+guess would be worse.
+
+`tsc -b` and `vite build` both pass clean.
+
+### To pick this back up next
+- Not yet deployed — needs the same PR-and-merge step as the last few
+  fixes.
+- Ed to re-scan and confirm model/serial land correctly this time — if
+  voltage/phase/manufacturer keep coming back blank on real scans (as
+  opposed to being wrong), that's expected given this photo's OCR quality,
+  not a bug — worth another look only if a *clean, well-lit* nameplate
+  photo still can't get those fields.
+
+---
+
+## 2026-09-26 (one more) — Crop-before-scan step, per Ed's request ("don't recreate the wheel")
+
+Ed asked to research how others solve this exact problem before building
+more blind fixes. Checked Tesseract's own project docs plus a comparable
+open-source nameplate-OCR tool (PlateLens, MIT-licensed) — both treat
+**cropping to just the label before OCR runs** as the standard, most
+reliable fix for "small text lost in a large busy background," more
+dependable than a page-segmentation-mode setting alone (which is what the
+sparse-text fix earlier today already was). Ed picked this over a cheaper
+"try OCR twice automatically" option — wanted the more reliable fix, not
+a shortcut.
+
+### What was built
+- **`src/lib/ocr.ts`**: `preprocessImage()` now takes an optional `CropRect`
+  (`{x,y,width,height}` as 0..1 fractions of the source image, resolution-
+  independent) and crops to it before applying the existing contrast/
+  grayscale pass. Fully backward compatible — omitting it behaves exactly
+  as before, so `DispatchScan.tsx` (photographs a mostly-text card, doesn't
+  need cropping) is untouched.
+- **`src/components/ImageCropper.tsx`** (new): a drag-to-crop step shown
+  right after a photo is picked, before OCR runs — a movable, resizable
+  box (drag the body to move, drag any corner to resize) over the photo,
+  with "Scan This Area" and "Use Full Photo" (skip cropping) buttons.
+  Built with plain pointer events (no new dependency), sized for a finger
+  (26px handles).
+- Wired into both nameplate scanners — **`NameplateScanButton.tsx`** (New
+  Equipment/System quick scan) and **`NameplateScanner.tsx`** (Job Detail's
+  per-component scan): picking a photo now loads it and shows the cropper
+  instead of immediately running OCR; OCR only starts once the tech taps
+  "Scan This Area" or "Use Full Photo". The dispatch ticket scanner is
+  unchanged (doesn't need this).
+
+### Verified for real, not just by reading the code
+Ran the actual dev server in local-only mode (temporary throwaway PIN,
+nothing committed) and drove it with a real headless Chromium via
+Playwright (temporarily installed, not saved to package.json/committed):
+- **Crop math**: imported the real `ocr.ts` module directly in-browser via
+  the dev server (no mocking) and fed `preprocessImage` a synthetic
+  4-quadrant test image with a known crop rect — confirmed the cropped
+  canvas has the exact expected pixel dimensions and pulls the correct
+  quadrant's content (checked via average pixel brightness), not just
+  "doesn't crash."
+- **Real drag interaction**: uploaded the actual Heatcraft nameplate photo
+  Ed sent earlier, into the real `NameplateScanButton` UI on the New
+  System form. Located the crop box and its corner handles by their real
+  rendered position (not assumed math) and drove real mouse-drag
+  sequences: dragging the bottom-right handle shrinks the box correctly
+  without moving its top-left corner; dragging the box body moves it
+  without changing its size. (First attempt at this test failed for a
+  boring reason — the crop box rendered below the default test-viewport
+  fold, so the simulated clicks landed off-screen; fixed by sizing the
+  test viewport to fit the whole cropper, not a real app bug.)
+  Confirmed via temporary debug logging that the pointer-capture-based
+  drag handlers actually fire in a real browser (not just typecheck) —
+  removed before committing.
+  Then confirmed tapping "Scan This Area" carries the chosen crop through
+  into the real `runOcr()` call — this sandbox still can't reach the
+  Tesseract CDN, so the OCR call itself fails exactly as it always does
+  here, but it fails through the app's existing clean error path (no
+  crash), proving the crop rect reached the real pipeline.
+
+`tsc -b` and `vite build` both pass clean.
+
+### To pick this back up next
+- Not yet deployed — needs the same PR-and-merge step as the last several
+  fixes.
+- **Real test still needed**: Ed to try the actual crop-then-scan flow on
+  his phone with a real nameplate and real Tesseract — touch-drag on a
+  real device (vs. simulated mouse events here) is the one thing this
+  sandbox genuinely cannot verify.
+- If cropping tighter to the label doesn't noticeably improve real
+  accuracy, the next thing to try (per the same PlateLens research) would
+  be multiple OCR passes (different rotations/contrast) merged together —
+  a bigger change, intentionally not built yet since Ed wanted the
+  cropping fix tried first.

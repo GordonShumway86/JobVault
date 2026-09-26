@@ -3,11 +3,12 @@ import { db } from '../lib/db';
 import { saveRecord, makeId, logActivity } from '../lib/repo';
 import { getOwnerId } from '../auth/AuthContext';
 import { extractNameplateFields, type NameplateExtraction } from '../lib/nameplateOcr';
-import { loadImage, preprocessImage, runOcr, StaleChunkImportError } from '../lib/ocr';
+import { loadImage, preprocessImage, runOcr, StaleChunkImportError, type CropRect } from '../lib/ocr';
 import type { Component } from '../types';
 import { Field, TextInput, Select } from './Field';
+import ImageCropper from './ImageCropper';
 
-type Stage = 'idle' | 'processing' | 'review' | 'saving';
+type Stage = 'idle' | 'cropping' | 'processing' | 'review' | 'saving';
 
 const FIELD_LABELS: Record<keyof NameplateExtraction, string> = {
   manufacturer: 'Manufacturer',
@@ -50,6 +51,7 @@ export default function NameplateScanner({
   const [error, setError] = useState<string | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [pendingImg, setPendingImg] = useState<HTMLImageElement | null>(null);
   const [rawText, setRawText] = useState('');
   const [showRaw, setShowRaw] = useState(false);
   const [fields, setFields] = useState<NameplateExtraction | null>(null);
@@ -57,7 +59,7 @@ export default function NameplateScanner({
   const selected = components.find((c) => c.id === componentId) ?? components[0];
 
   function reset() {
-    setStage('idle'); setError(null); setFile(null); setPreviewUrl(null); setRawText(''); setShowRaw(false); setFields(null);
+    setStage('idle'); setError(null); setFile(null); setPreviewUrl(null); setPendingImg(null); setRawText(''); setShowRaw(false); setFields(null);
   }
 
   async function onFilePicked(e: React.ChangeEvent<HTMLInputElement>) {
@@ -67,11 +69,21 @@ export default function NameplateScanner({
     setFile(picked);
     setPreviewUrl(URL.createObjectURL(picked));
     setError(null);
+    try {
+      setPendingImg(await loadImage(picked));
+      setStage('cropping');
+    } catch {
+      setError('Could not load that photo.');
+    }
+  }
+
+  async function runOcrOnCrop(crop?: CropRect) {
+    const img = pendingImg;
+    if (!img || !selected) return;
     setStage('processing');
     setStatusText('Loading OCR engine…');
     try {
-      const img = await loadImage(picked);
-      const canvas = preprocessImage(img, 180);
+      const canvas = preprocessImage(img, 180, crop);
       setStatusText('Reading nameplate…');
       const text = await runOcr(canvas, 'label');
       setRawText(text);
@@ -97,6 +109,9 @@ export default function NameplateScanner({
       setFields(fieldsFromComponent(selected));
       setError(err instanceof Error ? err.message : 'Could not read the photo. You can still fill in the fields by hand.');
       setStage('review');
+    } finally {
+      URL.revokeObjectURL(img.src);
+      setPendingImg(null);
     }
   }
 
@@ -163,7 +178,11 @@ export default function NameplateScanner({
       <input ref={cameraInput} type="file" accept="image/*" capture="environment" className="hidden" onChange={onFilePicked} />
       <input ref={libraryInput} type="file" accept="image/*" className="hidden" onChange={onFilePicked} />
 
-      {previewUrl && <img src={previewUrl} alt="nameplate" className="w-full max-h-56 object-contain rounded-lg bg-black" />}
+      {previewUrl && stage !== 'cropping' && <img src={previewUrl} alt="nameplate" className="w-full max-h-56 object-contain rounded-lg bg-black" />}
+
+      {stage === 'cropping' && pendingImg && (
+        <ImageCropper imageUrl={pendingImg.src} onConfirm={runOcrOnCrop} onSkip={() => runOcrOnCrop(undefined)} />
+      )}
 
       {stage === 'processing' && (
         <div className="text-zinc-400 text-sm text-center py-3">{statusText}</div>
