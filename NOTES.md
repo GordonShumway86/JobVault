@@ -945,3 +945,32 @@ split, delete call/customer, the PhotoUploader fix).
   doesn't remove already-uploaded photo files from Supabase Storage, only
   the database rows — a follow-up if Storage space ever becomes a real
   concern.
+
+---
+
+## 2026-09-26 — Dispatch scanner: site name bug (first real on-device test)
+
+Ed's first real on-device OCR test (the "Scan Ticket" flow from the
+Customers list, on the same Liquor Barn ticket used earlier). Real
+Tesseract output on the "Name | Number" line came back with a stray
+character or two after the store number (`948 Xx` instead of `948`),
+which failed the old strict `/^\d+$/` bare-number check in
+`extractDispatchFields` (`src/lib/dispatchOcr.ts`) and left the site
+literally named "948 Xx" instead of "Liquor Barn #948". Fixed: that check
+now tolerates a short trailing noise token after the number. Verified
+against the real OCR text from this test — now produces
+`siteName: "Liquor Barn #948"` correctly.
+
+Also confirmed with Ed: the missing PO#/Dispatch#/Reason-for-call fields
+on that screen are expected, not a bug — those only show up when the
+scanner is reached via "New Call → Scan a ticket instead," by design (see
+2026-09-25 "yet later" entry). No change made there.
+
+`tsc -b` and `vite build` pass clean.
+
+### To pick this back up next
+- Not yet deployed — this fix is committed on
+  `claude/review-notes-app-build-bkvmc1` only.
+- Still waiting on a real on-device test of the nameplate scanner, and a
+  test of the dispatch scanner's `?returnTo=job` path (New Call → Scan a
+  ticket instead), which hasn't been exercised with real OCR yet.
