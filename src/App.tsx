@@ -11,8 +11,8 @@ import CustomerDetail from './screens/CustomerDetail';
 import DispatchScan from './screens/DispatchScan';
 import SiteForm from './screens/SiteForm';
 import SiteDetail from './screens/SiteDetail';
-import EquipmentForm from './screens/EquipmentForm';
-import EquipmentDetail from './screens/EquipmentDetail';
+import SystemForm from './screens/SystemForm';
+import SystemDetail from './screens/SystemDetail';
 import More from './screens/More';
 import Settings from './screens/Settings';
 
@@ -53,9 +53,9 @@ export default function App() {
         <Route path="/customers/:customerId/sites/new" element={<SiteForm />} />
         <Route path="/sites/:id" element={<SiteDetail />} />
         <Route path="/sites/:id/edit" element={<SiteForm />} />
-        <Route path="/sites/:siteId/equipment/new" element={<EquipmentForm />} />
-        <Route path="/equipment/:id" element={<EquipmentDetail />} />
-        <Route path="/equipment/:id/edit" element={<EquipmentForm />} />
+        <Route path="/sites/:siteId/systems/new" element={<SystemForm />} />
+        <Route path="/systems/:id" element={<SystemDetail />} />
+        <Route path="/systems/:id/edit" element={<SystemForm />} />
         <Route path="/more" element={<More />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="*" element={<Navigate to="/" replace />} />

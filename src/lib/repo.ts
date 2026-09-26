@@ -91,16 +91,16 @@ export async function deleteJobCascade(jobId: string, opts?: { skipSync?: boolea
   await deleteRecord('jobs', jobId, opts);
 }
 
-// Deletes a customer and everything under it — every site, every piece of
-// equipment at those sites, every call ever made for this customer, and
-// everything attached to those calls. Jobs are deleted first (and enqueued
-// for a real remote delete each) because Postgres's jobs.customer_id/
-// site_id are `on delete restrict` — the customer delete would otherwise
-// be rejected by the server while any job still references it. Sites and
-// equipment aren't enqueued individually; they cascade automatically on
-// the server once the customer row is deleted at the end, so they're only
-// removed locally here (avoids 20-30 redundant delete calls for a big
-// account).
+// Deletes a customer and everything under it — every site, every system
+// (and its components) at those sites, every call ever made for this
+// customer, and everything attached to those calls. Jobs are deleted first
+// (and enqueued for a real remote delete each) because Postgres's
+// jobs.customer_id/site_id are `on delete restrict` — the customer delete
+// would otherwise be rejected by the server while any job still references
+// it. Sites, systems, and components aren't enqueued individually; they
+// cascade automatically on the server once the customer row is deleted at
+// the end, so they're only removed locally here (avoids dozens of redundant
+// delete calls for a big account).
 export async function deleteCustomerCascade(customerId: string) {
   const jobs = await db.jobs.where('customer_id').equals(customerId).toArray();
   for (const job of jobs) {

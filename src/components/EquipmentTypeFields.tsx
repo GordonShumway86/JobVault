@@ -1,97 +1,132 @@
 import {
-  EQUIPMENT_SUBTYPE_OPTIONS, SPLIT_SYSTEM_SUBTYPES,
-  type EquipmentCategory, type UnitPosition,
+  SYSTEM_TYPE_OPTIONS, COMPONENT_TYPE_OPTIONS, SPLIT_SYSTEM_CONFIGURATIONS,
+  type SystemCategory, type ComponentPosition,
 } from '../types';
 import { Field, Select, TextInput } from './Field';
 
 const CUSTOM = '__custom__';
 
-export interface EquipmentClassification {
-  unit_position: UnitPosition | null;
-  subtype: string | null;
+// Shared "pick from a preset list, or Other + free text" select — used for
+// both System Type and Component Type so nothing Ed runs into in the field
+// is ever a dead end.
+function TypeSelect({
+  label, options, value, onChange,
+}: {
+  label: string;
+  options: string[];
+  value: string;
+  onChange: (next: string) => void;
+}) {
+  const isCustom = value !== '' && !options.includes(value);
+  return (
+    <>
+      <Field label={label}>
+        <Select
+          value={isCustom ? CUSTOM : value}
+          onChange={(e) => onChange(e.target.value === CUSTOM ? '' : e.target.value)}
+        >
+          <option value="">Select…</option>
+          {options.map((o) => <option key={o} value={o}>{o}</option>)}
+          <option value={CUSTOM}>Other (type below)</option>
+        </Select>
+      </Field>
+      {isCustom && (
+        <Field label={`${label} (other)`}>
+          <TextInput value={value} onChange={(e) => onChange(e.target.value)} />
+        </Field>
+      )}
+    </>
+  );
 }
 
-// A category alone (e.g. "Split System") doesn't say enough to know what
-// you're actually looking at — this renders whatever follow-up choice(s)
-// that category needs: split systems ask which physical unit this record
-// is first (outdoor/indoor each have their own nameplate), since the type
-// choices genuinely differ between them; every other category with a
-// preset list just asks for its type directly. Categories with no preset
-// list (currently just "Other") render nothing.
-export function EquipmentTypeFields({
-  category, value, onChange,
+// System Type follows straight from System Category — no position step.
+// Split systems additionally get a "System Configuration" field (Single-
+// stage/Multi-stage/Dual-Fuel/Twinned); every other category doesn't.
+export function SystemTypeFields({
+  category, systemType, configuration, onChange,
 }: {
-  category: EquipmentCategory;
-  value: EquipmentClassification;
-  onChange: (next: EquipmentClassification) => void;
+  category: SystemCategory;
+  systemType: string;
+  configuration: string | null;
+  onChange: (next: { systemType: string; configuration: string | null }) => void;
 }) {
-  const { unit_position, subtype } = value;
-
-  if (category === 'split_system') {
-    const options = unit_position ? SPLIT_SYSTEM_SUBTYPES[unit_position] : [];
-    return (
-      <>
-        <Field label="Unit">
+  const options = SYSTEM_TYPE_OPTIONS[category];
+  return (
+    <>
+      <TypeSelect
+        label="System Type"
+        options={options}
+        value={systemType}
+        onChange={(next) => onChange({ systemType: next, configuration })}
+      />
+      {category === 'split_system' && (
+        <Field label="System Configuration">
           <Select
-            value={unit_position ?? ''}
-            onChange={(e) => onChange({ unit_position: (e.target.value || null) as UnitPosition | null, subtype: null })}
+            value={configuration ?? ''}
+            onChange={(e) => onChange({ systemType, configuration: e.target.value || null })}
           >
-            <option value="">Select unit…</option>
-            <option value="outdoor">Outdoor Unit</option>
-            <option value="indoor">Indoor Unit</option>
+            <option value="">Select…</option>
+            {SPLIT_SYSTEM_CONFIGURATIONS.map((c) => <option key={c} value={c}>{c}</option>)}
           </Select>
         </Field>
-        {unit_position && (
+      )}
+    </>
+  );
+}
+
+export interface ComponentClassification {
+  position: ComponentPosition | null;
+  componentType: string;
+}
+
+// A System's category decides which Component Types are allowed on it, and
+// whether those types are further split by physical position (split
+// systems and ductless/VRF have genuinely different indoor vs. outdoor
+// component types, each with its own nameplate) — every other category
+// just offers one flat Component Type list.
+export function ComponentTypeFields({
+  category, value, onChange,
+}: {
+  category: SystemCategory;
+  value: ComponentClassification;
+  onChange: (next: ComponentClassification) => void;
+}) {
+  const config = COMPONENT_TYPE_OPTIONS[category];
+  const { position, componentType } = value;
+
+  if (config.positioned) {
+    const options = position === 'outdoor' ? config.outdoorTypes : position === 'indoor' ? config.indoorTypes : [];
+    return (
+      <>
+        <Field label="Position">
+          <Select
+            value={position ?? ''}
+            onChange={(e) => onChange({ position: (e.target.value || null) as ComponentPosition | null, componentType: '' })}
+          >
+            <option value="">Select position…</option>
+            <option value="outdoor">Outdoor</option>
+            <option value="indoor">Indoor</option>
+          </Select>
+        </Field>
+        {position && (
           <TypeSelect
+            label="Component Type"
             options={options}
-            subtype={subtype}
-            onChange={(next) => onChange({ unit_position, subtype: next })}
+            value={componentType}
+            onChange={(next) => onChange({ position, componentType: next })}
           />
         )}
       </>
     );
   }
 
-  const options = EQUIPMENT_SUBTYPE_OPTIONS[category];
-  if (!options) return null;
+  if (!config.types.length) return null;
   return (
     <TypeSelect
-      options={options}
-      subtype={subtype}
-      onChange={(next) => onChange({ unit_position: null, subtype: next })}
+      label="Component Type"
+      options={config.types}
+      value={componentType}
+      onChange={(next) => onChange({ position: null, componentType: next })}
     />
-  );
-}
-
-// `subtype === null` means nothing picked yet; `subtype === ''` means
-// "Other" was picked but nothing typed into it yet — kept distinct from
-// null so re-selecting "Other" doesn't fall back out of custom mode the
-// instant the text is empty (an earlier version of this had that bug).
-function TypeSelect({
-  options, subtype, onChange,
-}: {
-  options: string[];
-  subtype: string | null;
-  onChange: (subtype: string | null) => void;
-}) {
-  const isCustom = subtype !== null && !options.includes(subtype);
-  return (
-    <>
-      <Field label="Type">
-        <Select
-          value={isCustom ? CUSTOM : subtype ?? ''}
-          onChange={(e) => onChange(e.target.value === CUSTOM ? '' : e.target.value || null)}
-        >
-          <option value="">Select type…</option>
-          {options.map((o) => <option key={o} value={o}>{o}</option>)}
-          <option value={CUSTOM}>Other (type below)</option>
-        </Select>
-      </Field>
-      {isCustom && (
-        <Field label="Type (other)">
-          <TextInput value={subtype ?? ''} onChange={(e) => onChange(e.target.value)} />
-        </Field>
-      )}
-    </>
   );
 }

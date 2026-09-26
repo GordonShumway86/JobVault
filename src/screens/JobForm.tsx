@@ -9,10 +9,10 @@ import { saveDraft, loadDraft, clearDraft } from '../lib/formDraft';
 import TopBar from '../components/TopBar';
 import SectionCard from '../components/SectionCard';
 import { Field, TextInput, TextArea, Select } from '../components/Field';
-import { EquipmentTypeFields } from '../components/EquipmentTypeFields';
+import { SystemTypeFields } from '../components/EquipmentTypeFields';
 import {
-  CALL_TYPE_LABELS, EQUIPMENT_CATEGORY_LABELS,
-  type CallType, type EquipmentCategory, type JobPriority, type UnitPosition,
+  CALL_TYPE_LABELS, SYSTEM_CATEGORY_LABELS,
+  type CallType, type SystemCategory, type JobPriority,
 } from '../types';
 
 interface DispatchNavState {
@@ -36,13 +36,13 @@ export default function JobForm() {
   const allCustomers = useLiveQuery(() => db.customers.toArray(), []) ?? [];
   const customers = useMemo(() => allCustomers.filter((c) => !c.archived), [allCustomers]);
   const allSites = useLiveQuery(() => db.sites.toArray(), []) ?? [];
-  const allEquipment = useLiveQuery(() => db.equipment.toArray(), []) ?? [];
+  const allSystems = useLiveQuery(() => db.systems.toArray(), []) ?? [];
 
   const [customerId, setCustomerId] = useState(editing?.customer_id ?? navState?.customerId ?? '');
   const [customerQuery, setCustomerQuery] = useState('');
   const [showCustomerSuggestions, setShowCustomerSuggestions] = useState(false);
   const [siteId, setSiteId] = useState(editing?.site_id ?? navState?.siteId ?? '');
-  const [equipmentId, setEquipmentId] = useState(editing?.equipment_id ?? '');
+  const [systemId, setSystemId] = useState(editing?.system_id ?? '');
   const [callType, setCallType] = useState<CallType>(editing?.call_type ?? 'service_diagnostic');
   const [priority, setPriority] = useState<JobPriority>(editing?.priority ?? 'normal');
   const [scheduledAt, setScheduledAt] = useState(editing?.scheduled_at?.slice(0, 16) ?? '');
@@ -58,13 +58,10 @@ export default function JobForm() {
   const [newSiteName, setNewSiteName] = useState('');
   const [newSiteAddress, setNewSiteAddress] = useState('');
 
-  const [showNewEquipment, setShowNewEquipment] = useState(false);
-  const [newEqCategory, setNewEqCategory] = useState<EquipmentCategory>('split_system');
-  const [newEqUnitPosition, setNewEqUnitPosition] = useState<UnitPosition | null>(null);
-  const [newEqSubtype, setNewEqSubtype] = useState<string | null>(null);
-  const [newEqManufacturer, setNewEqManufacturer] = useState('');
-  const [newEqModel, setNewEqModel] = useState('');
-  const [newEqSerial, setNewEqSerial] = useState('');
+  const [showNewSystem, setShowNewSystem] = useState(false);
+  const [newSysCategory, setNewSysCategory] = useState<SystemCategory>('split_system');
+  const [newSysType, setNewSysType] = useState('');
+  const [newSysConfiguration, setNewSysConfiguration] = useState<string | null>(null);
 
   const [saving, setSaving] = useState(false);
 
@@ -94,7 +91,7 @@ export default function JobForm() {
       if (typeof d.customerId === 'string') setCustomerId(d.customerId);
       if (typeof d.customerQuery === 'string') setCustomerQuery(d.customerQuery);
       if (typeof d.siteId === 'string') setSiteId(d.siteId);
-      if (typeof d.equipmentId === 'string') setEquipmentId(d.equipmentId);
+      if (typeof d.systemId === 'string') setSystemId(d.systemId);
       if (typeof d.callType === 'string') setCallType(d.callType as CallType);
       if (typeof d.priority === 'string') setPriority(d.priority as JobPriority);
       if (typeof d.scheduledAt === 'string') setScheduledAt(d.scheduledAt);
@@ -106,13 +103,10 @@ export default function JobForm() {
       if (typeof d.showNewSite === 'boolean') setShowNewSite(d.showNewSite);
       if (typeof d.newSiteName === 'string') setNewSiteName(d.newSiteName);
       if (typeof d.newSiteAddress === 'string') setNewSiteAddress(d.newSiteAddress);
-      if (typeof d.showNewEquipment === 'boolean') setShowNewEquipment(d.showNewEquipment);
-      if (typeof d.newEqCategory === 'string') setNewEqCategory(d.newEqCategory as EquipmentCategory);
-      if (typeof d.newEqUnitPosition === 'string') setNewEqUnitPosition(d.newEqUnitPosition as UnitPosition);
-      if (typeof d.newEqSubtype === 'string') setNewEqSubtype(d.newEqSubtype);
-      if (typeof d.newEqManufacturer === 'string') setNewEqManufacturer(d.newEqManufacturer);
-      if (typeof d.newEqModel === 'string') setNewEqModel(d.newEqModel);
-      if (typeof d.newEqSerial === 'string') setNewEqSerial(d.newEqSerial);
+      if (typeof d.showNewSystem === 'boolean') setShowNewSystem(d.showNewSystem);
+      if (typeof d.newSysCategory === 'string') setNewSysCategory(d.newSysCategory as SystemCategory);
+      if (typeof d.newSysType === 'string') setNewSysType(d.newSysType);
+      if (typeof d.newSysConfiguration === 'string') setNewSysConfiguration(d.newSysConfiguration);
     });
     return () => { cancelled = true; };
   }, [draftId]);
@@ -122,15 +116,15 @@ export default function JobForm() {
   // still being typed when the app gets interrupted can be lost.
   function persistDraft() {
     saveDraft(draftId, {
-      customerId, customerQuery, siteId, equipmentId, callType, priority, scheduledAt, workOrderNumber, dispatchNumber, reasonForCall,
+      customerId, customerQuery, siteId, systemId, callType, priority, scheduledAt, workOrderNumber, dispatchNumber, reasonForCall,
       showNewCustomer, newCustomerName,
       showNewSite, newSiteName, newSiteAddress,
-      showNewEquipment, newEqCategory, newEqUnitPosition, newEqSubtype, newEqManufacturer, newEqModel, newEqSerial,
+      showNewSystem, newSysCategory, newSysType, newSysConfiguration,
     });
   }
 
   const sitesForCustomer = useMemo(() => allSites.filter((s) => s.customer_id === customerId), [allSites, customerId]);
-  const equipmentForSite = useMemo(() => allEquipment.filter((e) => e.site_id === siteId), [allEquipment, siteId]);
+  const systemsForSite = useMemo(() => allSystems.filter((s) => s.site_id === siteId), [allSystems, siteId]);
 
   async function ensureCustomer(): Promise<string> {
     if (customerId) return customerId;
@@ -157,20 +151,19 @@ export default function JobForm() {
     return rec.id;
   }
 
-  async function ensureEquipment(siteIdVal: string): Promise<string | null> {
-    if (equipmentId) return equipmentId;
-    if (!showNewEquipment || !newEqModel.trim()) return null;
+  async function ensureSystem(siteIdVal: string): Promise<string | null> {
+    if (systemId) return systemId;
+    if (!showNewSystem || !newSysType.trim()) return null;
     const ownerId = getOwnerId()!;
     const rec = {
-      id: makeId(), owner_id: ownerId, site_id: siteIdVal, category: newEqCategory,
-      unit_position: newEqUnitPosition, subtype: newEqSubtype?.trim() || null, nickname: null,
-      location_at_site: null, manufacturer: newEqManufacturer || null, model_number: newEqModel || null,
-      serial_number: newEqSerial || null, manufacture_date: null, refrigerant_type: null, nominal_capacity: null,
-      voltage: null, phase: null, mca: null, mocp: null, compressor_model: null, filter_sizes: null,
-      belt_sizes: null, warranty_notes: null, installed_date: null, equipment_notes: null, status: 'active' as const,
+      id: makeId(), owner_id: ownerId, site_id: siteIdVal, category: newSysCategory,
+      system_type: newSysType.trim(), configuration: newSysCategory === 'split_system' ? newSysConfiguration : null,
+      nickname: null, location_at_site: null, installed_date: null, system_notes: null, status: 'active' as const,
+      legacy_manufacturer: null, legacy_model_number: null, legacy_serial_number: null, legacy_refrigerant_type: null,
+      legacy_voltage: null, legacy_phase: null, legacy_mca: null, legacy_mocp: null,
       created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
     };
-    await saveRecord('equipment', rec);
+    await saveRecord('systems', rec);
     return rec.id;
   }
 
@@ -181,11 +174,11 @@ export default function JobForm() {
       const ownerId = getOwnerId()!;
       const custId = await ensureCustomer();
       const siteIdFinal = await ensureSite(custId);
-      const eqId = await ensureEquipment(siteIdFinal);
+      const sysId = await ensureSystem(siteIdFinal);
 
       if (editing) {
         const updated = {
-          ...editing, customer_id: custId, site_id: siteIdFinal, equipment_id: eqId,
+          ...editing, customer_id: custId, site_id: siteIdFinal, system_id: sysId,
           call_type: callType, priority, scheduled_at: scheduledAt ? new Date(scheduledAt).toISOString() : null,
           work_order_number: workOrderNumber || null, dispatch_number: dispatchNumber || null, reason_for_call: reasonForCall || null,
           updated_at: new Date().toISOString(),
@@ -199,7 +192,7 @@ export default function JobForm() {
         const job = {
           id: makeId(), owner_id: ownerId, job_number: generateJobNumber(), work_order_number: workOrderNumber || null,
           dispatch_number: dispatchNumber || null,
-          customer_id: custId, site_id: siteIdFinal, equipment_id: eqId, call_type: callType, status: 'new' as const,
+          customer_id: custId, site_id: siteIdFinal, system_id: sysId, call_type: callType, status: 'new' as const,
           priority, scheduled_at: scheduledAt ? new Date(scheduledAt).toISOString() : null, arrived_at: null, departed_at: null,
           reason_for_call: reasonForCall || null, technician_notes: null, diagnosis: null, work_performed: null,
           recommendations: null, follow_up_instructions: null, internal_notes: null, customer_visible_notes: null,
@@ -229,7 +222,7 @@ export default function JobForm() {
                 onChange={(e) => {
                   setCustomerQuery(e.target.value);
                   setCustomerId('');
-                  setSiteId(''); setEquipmentId(''); setShowNewCustomer(false);
+                  setSiteId(''); setSystemId(''); setShowNewCustomer(false);
                   setShowCustomerSuggestions(true);
                 }}
                 onFocus={() => setShowCustomerSuggestions(true)}
@@ -285,7 +278,7 @@ export default function JobForm() {
             <>
               {customerId && (
                 <Field label="Site">
-                  <Select value={siteId} onChange={(e) => { setSiteId(e.target.value); setEquipmentId(''); }}>
+                  <Select value={siteId} onChange={(e) => { setSiteId(e.target.value); setSystemId(''); }}>
                     <option value="">Select site…</option>
                     {sitesForCustomer.map((s) => (
                       <option key={s.id} value={s.id}>
@@ -311,42 +304,41 @@ export default function JobForm() {
         </SectionCard>
 
         {(siteId || showNewSite) && (
-          <SectionCard title="Equipment" subtitle="Optional — tie this call to a unit">
+          <SectionCard title="System" subtitle="Optional — tie this call to a system">
             {siteId && (
-              <Field label="Equipment">
-                <Select value={equipmentId} onChange={(e) => setEquipmentId(e.target.value)}>
-                  <option value="">None / not equipment-specific</option>
-                  {equipmentForSite.map((e) => (
-                    <option key={e.id} value={e.id}>{e.nickname || `${e.manufacturer ?? ''} ${e.model_number ?? ''}`.trim() || EQUIPMENT_CATEGORY_LABELS[e.category]}</option>
+              <Field label="System">
+                <Select value={systemId} onChange={(e) => setSystemId(e.target.value)}>
+                  <option value="">None / not system-specific</option>
+                  {systemsForSite.map((s) => (
+                    <option key={s.id} value={s.id}>{s.nickname || s.system_type || SYSTEM_CATEGORY_LABELS[s.category]}</option>
                   ))}
                 </Select>
               </Field>
             )}
-            {!equipmentId && (
-              <button type="button" onClick={() => setShowNewEquipment((v) => !v)} className="text-blue-400 text-sm font-medium">
-                {showNewEquipment ? '− Cancel new equipment' : '+ New equipment'}
+            {!systemId && (
+              <button type="button" onClick={() => setShowNewSystem((v) => !v)} className="text-blue-400 text-sm font-medium">
+                {showNewSystem ? '− Cancel new system' : '+ New system'}
               </button>
             )}
-            {!equipmentId && showNewEquipment && (
+            {!systemId && showNewSystem && (
               <div className="space-y-2.5 rounded-lg border border-zinc-800 p-3 bg-zinc-950/40">
                 <Field label="Category">
                   <Select
-                    value={newEqCategory}
-                    onChange={(e) => { setNewEqCategory(e.target.value as EquipmentCategory); setNewEqUnitPosition(null); setNewEqSubtype(null); }}
+                    value={newSysCategory}
+                    onChange={(e) => { setNewSysCategory(e.target.value as SystemCategory); setNewSysType(''); setNewSysConfiguration(null); }}
                   >
-                    {Object.entries(EQUIPMENT_CATEGORY_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                    {Object.entries(SYSTEM_CATEGORY_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                   </Select>
                 </Field>
-                <EquipmentTypeFields
-                  category={newEqCategory}
-                  value={{ unit_position: newEqUnitPosition, subtype: newEqSubtype }}
-                  onChange={(next) => { setNewEqUnitPosition(next.unit_position); setNewEqSubtype(next.subtype); }}
+                <SystemTypeFields
+                  category={newSysCategory}
+                  systemType={newSysType}
+                  configuration={newSysConfiguration}
+                  onChange={(next) => { setNewSysType(next.systemType); setNewSysConfiguration(next.configuration); }}
                 />
-                <div className="grid grid-cols-2 gap-2.5">
-                  <Field label="Manufacturer"><TextInput value={newEqManufacturer} onChange={(e) => setNewEqManufacturer(e.target.value)} /></Field>
-                  <Field label="Model #"><TextInput value={newEqModel} onChange={(e) => setNewEqModel(e.target.value)} /></Field>
+                <div className="text-zinc-500 text-xs">
+                  Full nameplate detail (manufacturer, model, serial, etc.) is added per-component on the system's own page after this call is saved.
                 </div>
-                <Field label="Serial #"><TextInput value={newEqSerial} onChange={(e) => setNewEqSerial(e.target.value)} /></Field>
               </div>
             )}
           </SectionCard>
